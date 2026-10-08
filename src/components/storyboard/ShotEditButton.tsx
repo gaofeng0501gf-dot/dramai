@@ -13,6 +13,13 @@ interface Props {
   shot: Storyboard
 }
 
+const OMNI_DESCRIPTION =
+  'Kling Omni 会把「视频动作 / 导演指令」作为视频主体；系统再自动追加运镜、参考图、一致性、电影级物理/特效规则和声音规则。'
+const OMNI_AUDIO_NOTE =
+  'Omni 原生声音只认上方 sceneText 里明确写出的「角色名：『台词』」；这里的旁白不会自动变成对白。'
+const OMNI_IMAGE_PROMPT_NOTE =
+  'Kling Omni 视频不会使用这里的静态 imagePrompt，保留它只为切回普通图生视频模式兼容。'
+
 export function ShotEditButton({ shot }: Props) {
   const provider = useActiveProvider('image2video')
   const omni = isKlingOmni(provider)
@@ -74,11 +81,7 @@ function ShotEditDialog({
       onClose={onClose}
       className="max-w-3xl"
       title={`编辑分镜 #${String(shot.sequence).padStart(2, '0')}`}
-      description={
-        omni
-          ? 'Kling Omni 会把「视频动作 / 导演指令」作为视频主体；系统再自动追加运镜、参考图、一致性、电影级物理/特效规则和声音规则。'
-          : '修改这一镜的场景动作、旁白与生图提示词。'
-      }
+      description={omni ? OMNI_DESCRIPTION : '修改这一镜的场景动作、旁白与生图提示词。'}
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         <Label>
@@ -108,7 +111,7 @@ function ShotEditDialog({
           />
           {omni && (
             <span className="mt-1 block text-[11px] font-normal text-muted">
-              Omni 原生声音只认上方 sceneText 里明确写出的「角色名：『台词』」；这里的旁白不会自动变成对白。
+              {OMNI_AUDIO_NOTE}
             </span>
           )}
         </Label>
@@ -123,7 +126,7 @@ function ShotEditDialog({
           />
           {omni && (
             <span className="mt-1 block text-[11px] font-normal text-muted">
-              Kling Omni 视频不会使用这里的静态 imagePrompt，保留它只为切回普通图生视频模式兼容。
+              {OMNI_IMAGE_PROMPT_NOTE}
             </span>
           )}
         </Label>
