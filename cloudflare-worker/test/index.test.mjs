@@ -71,6 +71,10 @@ describe('Origin', () => {
 })
 
 describe('鉴权', () => {
+  it('固定使用已验证的 Beijing 上游', () => {
+    assert.equal(UPSTREAM, 'https://api-beijing.klingai.com')
+  })
+
   it('3. 错误 / 缺失 PROXY_TOKEN 返回 401，且不访问上游', async () => {
     const up = fakeUpstream()
     for (const token of ['wrong', `${env.PROXY_TOKEN}x`, '', env.KLING_API_KEY, null]) {
@@ -91,9 +95,10 @@ describe('鉴权', () => {
     assert.equal(up.calls.length, 0)
   })
 
-  it('8. 上游 Authorization 使用 KLING_API_KEY，而不是 PROXY_TOKEN', async () => {
+  it('8. 上游 Authorization 使用 KLING_API_KEY，而不是 PROXY_TOKEN，并清理复制空白', async () => {
     const up = fakeUpstream()
-    await handleRequest(req('/account/costs?start_time=1&end_time=2'), env, up.fetchImpl)
+    const spacedEnv = { ...env, KLING_API_KEY: `  ${env.KLING_API_KEY}  \n` }
+    await handleRequest(req('/account/costs?start_time=1&end_time=2'), spacedEnv, up.fetchImpl)
     assert.equal(up.calls[0].headers.get('Authorization'), `Bearer ${env.KLING_API_KEY}`)
     assert.ok(!up.calls[0].headers.get('Authorization').includes(env.PROXY_TOKEN))
   })
