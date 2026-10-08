@@ -57,6 +57,10 @@ function ShotEditDialog({
   const [saving, setSaving] = useState(false)
 
   const scene = sceneText.trim()
+  const description = omni ? OMNI_DESCRIPTION : '修改这一镜的场景动作、旁白与生图提示词。'
+  const promptLimitNote = omni
+    ? `Omni 最终 prompt 上限 ${KLING_OMNI_PROMPT_MAX} 字符，过长时系统保留首尾并压缩中段。`
+    : undefined
 
   const save = async (e: FormEvent) => {
     e.preventDefault()
@@ -81,9 +85,7 @@ function ShotEditDialog({
       onClose={onClose}
       className="max-w-3xl"
       title={`编辑分镜 #${String(shot.sequence).padStart(2, '0')}`}
-      description={
-        omni ? OMNI_DESCRIPTION : '修改这一镜的场景动作、旁白与生图提示词。'
-      }
+      description={description}
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         <Label>
@@ -96,10 +98,7 @@ function ShotEditDialog({
             className="mt-1 font-mono text-xs leading-relaxed"
           />
           <span className="mt-1 block text-[11px] font-normal text-muted">
-            当前 {sceneText.length} 字符
-            {omni
-              ? `；Omni 最终 prompt 上限 ${KLING_OMNI_PROMPT_MAX} 字符，过长时系统保留首尾并压缩中段。`
-              : ''}
+            当前 {sceneText.length} 字符{promptLimitNote ? `；${promptLimitNote}` : ''}
           </span>
         </Label>
 
@@ -111,9 +110,9 @@ function ShotEditDialog({
             onChange={(e) => setNarration(e.target.value)}
             className="mt-1"
           />
-          {omni && (
-            <span className="mt-1 block text-[11px] font-normal text-muted">{OMNI_AUDIO_NOTE}</span>
-          )}
+        </Label>
+        {omni && <p className="text-[11px] text-muted">{OMNI_AUDIO_NOTE}</p>}
+        <Label>
         </Label>
 
         <Label>
@@ -124,12 +123,8 @@ function ShotEditDialog({
             onChange={(e) => setImagePrompt(e.target.value)}
             className="mt-1 font-mono text-xs"
           />
-          {omni && (
-            <span className="mt-1 block text-[11px] font-normal text-muted">
-              {OMNI_IMAGE_PROMPT_NOTE}
-            </span>
-          )}
         </Label>
+        {omni && <p className="text-[11px] text-muted">{OMNI_IMAGE_PROMPT_NOTE}</p>}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
