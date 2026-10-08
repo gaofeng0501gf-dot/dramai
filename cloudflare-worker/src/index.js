@@ -3,7 +3,7 @@
  *
  * 浏览器（GitHub Pages 上的 dramai）
  *   → 本 Worker（校验 Origin / 路径 / PROXY_TOKEN）
- *   → https://api-singapore.klingai.com（换成服务端的 KLING_API_KEY）
+ *   → https://api-beijing.klingai.com（换成服务端的 KLING_API_KEY）
  *
  * Secrets（只用 `wrangler secret put` 设置，绝不写进仓库或 wrangler.toml）：
  *   KLING_API_KEY  真正的 Kling Open Platform API Key，只存在于 Worker 里
@@ -12,7 +12,7 @@
  * 本文件不打印任何日志，避免 Secret 或请求内容进入 Cloudflare 日志。
  */
 
-export const UPSTREAM = 'https://api-singapore.klingai.com'
+export const UPSTREAM = 'https://api-beijing.klingai.com'
 export const ALLOWED_ORIGIN = 'https://gaofeng0501gf-dot.github.io'
 
 const CORS_METHODS = 'GET,POST,OPTIONS'
@@ -101,7 +101,7 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   // 6. 构造上游请求：固定上游域名，保留 path + query；只转发必要请求头
   const upstreamUrl = `${UPSTREAM}${url.pathname}${url.search}`
   const headers = new Headers()
-  headers.set('Authorization', `Bearer ${env.KLING_API_KEY}`)
+  headers.set('Authorization', `Bearer ${String(env.KLING_API_KEY).trim()}`)
   const contentType = request.headers.get('Content-Type')
   if (contentType) headers.set('Content-Type', contentType)
   const accept = request.headers.get('Accept')
