@@ -22,6 +22,9 @@ interface Props {
   className?: string
 }
 
+const REFERENCE_STRATEGY =
+  '参考策略：视频接口最多 7 张。多人动作镜头优先考虑「1 张场景/关系母图 + 核心人物 + 核心武器/道具」，不要用重复定妆图浪费名额。'
+
 /**
  * 「Omni参考」：为单个分镜挑选 Kling Omni 参考素材（≤7）。
  * 只在当前激活的图生视频 provider 是 kling-omni 时出现。
@@ -140,15 +143,12 @@ function PickerDialog({ shot, onClose }: { shot: Storyboard; onClose: () => void
       }
     >
       <div className="mb-3 rounded-md border border-border bg-background-soft-2/60 p-3 text-xs leading-relaxed">
-        <p className="text-foreground">
-          参考策略：视频接口最多 {KLING_OMNI_MAX_REFS} 张。多人动作镜头优先考虑「1 张场景/关系母图 + 核心人物 + 核心武器/道具」，不要用重复定妆图浪费名额。
-        </p>
+        <p className="text-foreground">{REFERENCE_STRATEGY}</p>
         <p className="mt-1 text-muted">
-          当前：角色 {mixAdvice.characterCount} · 素材 {mixAdvice.materialCount} · 合计 {mixAdvice.total}
+          当前：角色 {mixAdvice.characterCount} · 素材 {mixAdvice.materialCount} · 合计{' '}
+          {mixAdvice.total}
         </p>
-        {mixAdvice.warning && (
-          <p className="mt-1 text-amber-400">{mixAdvice.warning}</p>
-        )}
+        {mixAdvice.warning && <p className="mt-1 text-amber-400">{mixAdvice.warning}</p>}
       </div>
       {candidates.length === 0 ? (
         <p className="text-sm text-muted">
