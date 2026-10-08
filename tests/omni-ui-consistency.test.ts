@@ -2,7 +2,13 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { showImageGenerationEntry, storyboardStatusLabel } from '@/core/video/omni'
+import {
+  KLING_OMNI_MAX_DURATION,
+  KLING_OMNI_MIN_DURATION,
+  showImageGenerationEntry,
+  storyboardStatusLabel,
+  toOmniDuration,
+} from '@/core/video/omni'
 import type { ApiFlavor, Storyboard } from '@/types/domain'
 
 const omni = { apiFlavor: 'kling-omni' as ApiFlavor }
@@ -44,6 +50,28 @@ describe('Omni 模式隐藏旧生图入口', () => {
     assert.match(s, /^\s*<OmniReferencePicker shot=\{s\} \/>$/m)
     assert.match(s, /^\s*<ShotVideoButton shot=\{s\} \/>$/m)
     assert.match(s, /storyboardStatusLabel\(s, videoProvider\)/)
+  })
+
+  it('StoryboardList：仅 Kling Omni 显示 3~15 秒时长选择器', () => {
+    const list = src('components/storyboard/StoryboardList.tsx')
+    const picker = src('components/storyboard/ShotDurationSelect.tsx')
+    assert.match(list, /\{isKlingOmni\(videoProvider\) && <ShotDurationSelect shot=\{s\} \/>\}/)
+    assert.match(picker, /KLING_OMNI_MIN_DURATION/)
+    assert.match(picker, /KLING_OMNI_MAX_DURATION/)
+    assert.match(picker, /updateStoryboard\(shot\.id, \{ durationSec \}\)/)
+    assert.match(picker, /aria-label="视频时长"/)
+  })
+})
+
+describe('Omni 视频时长', () => {
+  it('官方 3~15 秒范围完整可用，超界提交时仍由 pipeline 夹紧', () => {
+    assert.equal(KLING_OMNI_MIN_DURATION, 3)
+    assert.equal(KLING_OMNI_MAX_DURATION, 15)
+    for (let sec = 3; sec <= 15; sec += 1) {
+      assert.equal(toOmniDuration(sec), String(sec))
+    }
+    assert.equal(toOmniDuration(2), '3')
+    assert.equal(toOmniDuration(16), '15')
   })
 })
 
