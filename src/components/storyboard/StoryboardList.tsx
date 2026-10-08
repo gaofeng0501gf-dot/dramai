@@ -8,6 +8,7 @@ import { ShotVideoButton } from '@/components/storyboard/ShotVideoButton'
 import { CameraMovementSelect } from '@/components/storyboard/CameraMovementSelect'
 import { OmniReferencePicker } from '@/components/storyboard/OmniReferencePicker'
 import { ShotDurationSelect } from '@/components/storyboard/ShotDurationSelect'
+import { ShotEditButton } from '@/components/storyboard/ShotEditButton'
 import { db } from '@/core/storage/db'
 import { deleteStoryboard } from '@/core/storage/storyboards'
 import { getObjectURL, releaseObjectURL } from '@/core/storage/assets'
@@ -158,6 +159,7 @@ export function StoryboardList({ projectId }: Props) {
                 <CameraMovementSelect shot={s} />
                 {isKlingOmni(videoProvider) && <ShotDurationSelect shot={s} />}
                 {showImageEntry && <ShotImageButton shot={s} />}
+                <ShotEditButton shot={s} />
                 <OmniReferencePicker shot={s} />
                 <ShotVideoButton shot={s} />
               </div>

@@ -1,8 +1,8 @@
 # dramai-kling-proxy
 
-Kling 官方 API 的 CORS 安全中转（Cloudflare Worker）。
+Kling 官方 API 的 CORS 安全中转（Cloudflare Worker）。当前部署已验证使用 Beijing 上游。
 
-浏览器不能直接调用 `https://api-singapore.klingai.com`（CORS 拦截），而且真正的 Kling API Key 也不该放在浏览器里。这个 Worker 解决这两件事：
+浏览器不能直接调用 `https://api-beijing.klingai.com`（CORS 拦截），而且真正的 Kling API Key 也不该放在浏览器里。这个 Worker 解决这两件事：
 
 ```
 https://gaofeng0501gf-dot.github.io/dramai/      （浏览器，只知道 PROXY_TOKEN）
@@ -12,7 +12,7 @@ https://dramai-kling-proxy.<account-subdomain>.workers.dev   （本 Worker）
         │  校验 Origin、路径、PROXY_TOKEN
         │  Authorization 换成 Bearer <KLING_API_KEY>
         ▼
-https://api-singapore.klingai.com                （Kling 官方）
+https://api-beijing.klingai.com                （Kling 官方）
 ```
 
 dramai 的 Kling Omni 协议完全不变，Worker 只做透传。
@@ -21,7 +21,7 @@ dramai 的 Kling Omni 协议完全不变，Worker 只做透传。
 
 | 规则       | 行为                                                                                                                                                                               |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 上游       | 固定为 `https://api-singapore.klingai.com`，不能被请求改写                                                                                                                         |
+| 上游       | 固定为 `https://api-beijing.klingai.com`，不能被请求改写                                                                                                                         |
 | Origin     | 只允许 `https://gaofeng0501gf-dot.github.io`；其他 Origin（包括没有 Origin 的 curl 请求）返回 **403**                                                                              |
 | 接口白名单 | `GET /account/costs`、`POST /v1/videos/omni-video`、`GET /v1/videos/omni-video/{task_id}`；其他路径或方法返回 **404**                                                              |
 | 预检       | `OPTIONS` 返回 204，带 `Access-Control-Allow-Origin`、`Access-Control-Allow-Methods: GET,POST,OPTIONS`、`Access-Control-Allow-Headers: Authorization,Content-Type`、`Vary: Origin` |
