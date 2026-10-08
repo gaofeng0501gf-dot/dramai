@@ -33,7 +33,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "test": "node --experimental-strip-types --experimental-test-module-mocks --no-warnings --import ./tests/register.mjs --test \"tests/**/*.test.ts\"",
+    "test": "node --experimental-strip-types --experimental-test-module-mocks --no-warnings --import ./tests/register.mjs --test \"tests/**/*.test.ts\" \"cloudflare-worker/test/*.test.mjs\"",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json,md}\" \"docs/**/*.md\" \"*.md\"",
