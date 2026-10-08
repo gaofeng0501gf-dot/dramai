@@ -62,7 +62,7 @@ describe('kling-omni Provider 保存', () => {
 
   it('Kling Omni 默认 Base URL / 模型', () => {
     assert.deepEqual(FLAVOR_DEFAULTS['kling-omni'], {
-      baseUrl: 'https://api-singapore.klingai.com',
+      baseUrl: 'https://api-beijing.klingai.com',
       model: 'kling-v3-omni',
     })
   })
