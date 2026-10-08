@@ -1,0 +1,15 @@
+# dramai-kling-proxy：Kling 官方 API 的 CORS 安全中转
+#
+# ⚠️ 不要在这里写任何 Secret。
+#    KLING_API_KEY 和 PROXY_TOKEN 只能用下面的命令设置（加密保存在 Cloudflare）：
+#      npx wrangler secret put KLING_API_KEY
+#      npx wrangler secret put PROXY_TOKEN
+
+name = "dramai-kling-proxy"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+# 不开启日志采集：Worker 本身也不打印任何内容
+[observability]
+enabled = false
