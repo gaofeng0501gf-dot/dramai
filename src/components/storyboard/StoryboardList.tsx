@@ -7,10 +7,11 @@ import { ShotImageButton } from '@/components/storyboard/ShotImageButton'
 import { ShotVideoButton } from '@/components/storyboard/ShotVideoButton'
 import { CameraMovementSelect } from '@/components/storyboard/CameraMovementSelect'
 import { OmniReferencePicker } from '@/components/storyboard/OmniReferencePicker'
+import { ShotDurationSelect } from '@/components/storyboard/ShotDurationSelect'
 import { db } from '@/core/storage/db'
 import { deleteStoryboard } from '@/core/storage/storyboards'
 import { getObjectURL, releaseObjectURL } from '@/core/storage/assets'
-import { showImageGenerationEntry, storyboardStatusLabel } from '@/core/video/omni'
+import { isKlingOmni, showImageGenerationEntry, storyboardStatusLabel } from '@/core/video/omni'
 import { useActiveProvider } from '@/store/settings'
 import type { Asset, Character, Storyboard } from '@/types/domain'
 
@@ -155,6 +156,7 @@ export function StoryboardList({ projectId }: Props) {
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <CameraMovementSelect shot={s} />
+                {isKlingOmni(videoProvider) && <ShotDurationSelect shot={s} />}
                 {showImageEntry && <ShotImageButton shot={s} />}
                 <OmniReferencePicker shot={s} />
                 <ShotVideoButton shot={s} />
