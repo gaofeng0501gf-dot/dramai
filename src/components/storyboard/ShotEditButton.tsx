@@ -81,7 +81,9 @@ function ShotEditDialog({
       onClose={onClose}
       className="max-w-3xl"
       title={`编辑分镜 #${String(shot.sequence).padStart(2, '0')}`}
-      description={omni ? OMNI_DESCRIPTION : '修改这一镜的场景动作、旁白与生图提示词。'}
+      description={
+        omni ? OMNI_DESCRIPTION : '修改这一镜的场景动作、旁白与生图提示词。'
+      }
     >
       <form onSubmit={save} className="flex flex-col gap-5">
         <Label>
@@ -110,9 +112,7 @@ function ShotEditDialog({
             className="mt-1"
           />
           {omni && (
-            <span className="mt-1 block text-[11px] font-normal text-muted">
-              {OMNI_AUDIO_NOTE}
-            </span>
+            <span className="mt-1 block text-[11px] font-normal text-muted">{OMNI_AUDIO_NOTE}</span>
           )}
         </Label>
 
