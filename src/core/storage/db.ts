@@ -27,6 +27,17 @@ class DramaiDB extends Dexie {
       assets: 'id, projectId, kind, createdAt',
       generations: 'id, projectId, stageName, status, createdAt',
     })
+
+    // v2: Storyboard 新增可选字段 referenceAssetIds（Kling Omni 参考素材）。
+    // 不新增索引、不改主键，旧数据原样保留（字段缺省即视为未选择）。
+    this.version(2).stores({
+      projects: 'id, status, createdAt, updatedAt',
+      characters: 'id, projectId, role, locked, createdAt',
+      materials: 'id, projectId, kind, createdAt',
+      storyboards: 'id, projectId, status, [projectId+sequence]',
+      assets: 'id, projectId, kind, createdAt',
+      generations: 'id, projectId, stageName, status, createdAt',
+    })
   }
 }
 

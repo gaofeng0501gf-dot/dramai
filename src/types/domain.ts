@@ -17,6 +17,9 @@ export type ProviderKind = 'llm' | 'text2image' | 'image2video' | 'imageEdit'
  *                                  POST /volcengine/api/v3/contents/generations/tasks
  *                                  + GET 轮询；body 用 multimodal content 数组
  *  - 'kling'                     → image2video 走 /v1/videos/image2video（Kling 原生）
+ *  - 'kling-omni'                → Kling 3.0 Omni 原生多参考视频
+ *                                  POST /v1/videos/omni-video + GET /v1/videos/omni-video/{task_id}
+ *                                  不需要起始帧，直接用分镜选中的参考素材（≤7 张）
  *  - 'runway'                    → image2video Runway 原生（v0.4 暂回退到通用）
  */
 export type ApiFlavor =
@@ -25,6 +28,7 @@ export type ApiFlavor =
   | 'volcengine'
   | 'aliyun'
   | 'kling'
+  | 'kling-omni'
   | 'runway'
 
 export interface Provider {
@@ -118,6 +122,12 @@ export interface Storyboard {
   videoAssetId?: string
   /** 运镜参数。v0.3 起；旧分镜没有则按 static 处理。 */
   cameraParams?: CameraParams
+  /**
+   * Kling Omni 多参考素材：指向 assets 表里已有的图片 asset（角色锁定参考图 /
+   * 项目 image 素材）。只存引用、不复制 Blob；每个分镜独立挑选，最多 7 个。
+   * 删除分镜时**不能**连带删除这些 asset（它们属于角色/素材）。
+   */
+  referenceAssetIds?: string[]
   /**
    * 异步视频任务句柄，用于刷新页面后恢复轮询。
    * 任务结束后清空。

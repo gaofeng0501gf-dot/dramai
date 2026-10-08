@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useActiveProvider } from '@/store/settings'
 import { db } from '@/core/storage/db'
 import { generateShotVideo, type VideoShotEvent } from '@/core/pipeline/video-shot'
+import { isKlingOmni, isShotVideoReady } from '@/core/video/omni'
 import type { Storyboard } from '@/types/domain'
 
 interface Props {
@@ -37,8 +38,10 @@ export function BatchVideoButton({ projectId }: Props) {
 
   if (!provider || shots.length === 0) return null
 
-  const targets = shots.filter((s) => s.imageAssetId && !s.videoAssetId)
-  const ready = shots.filter((s) => s.imageAssetId).length
+  // 普通 I2V 以 imageAssetId 判断 ready；kling-omni 以 referenceAssetIds 判断
+  const omni = isKlingOmni(provider)
+  const targets = shots.filter((s) => isShotVideoReady(s, provider) && !s.videoAssetId)
+  const ready = shots.filter((s) => isShotVideoReady(s, provider)).length
 
   const stop = () => {
     abortRef.current?.abort()
@@ -110,7 +113,9 @@ export function BatchVideoButton({ projectId }: Props) {
             ? `批量生视频（剩 ${targets.length}）`
             : ready > 0
               ? '所有分镜已有视频'
-              : '先批量生图再生视频'}
+              : omni
+                ? '请为分镜选择Omni参考素材'
+                : '先批量生图再生视频'}
         </Button>
       )}
       {running && progress && (

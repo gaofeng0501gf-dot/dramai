@@ -3,8 +3,19 @@ import type { ApiFlavor } from '@/types/domain'
 export interface I2VRequest {
   model: string
   prompt: string
-  /** 起始帧。 */
-  imageBlob: Blob
+  /**
+   * 起始帧。普通 image2video（openai-compatible / kling / volcengine / aliyun）必填；
+   * kling-omni 不使用。为兼容旧调用保留字段名，仅改为可选。
+   */
+  imageBlob?: Blob
+  /**
+   * Kling Omni 多参考图（人物 / 武器 / 场景 / 道具）。按顺序对应
+   * prompt 里的 <<<image_1>>>、<<<image_2>>>…；其它协议忽略。
+   */
+  referenceImageBlobs?: Array<{
+    blob: Blob
+    name?: string
+  }>
   /** 整数秒，常见值 5 / 10。 */
   durationSec?: number
   /** "9:16" / "16:9" / "1:1" 等。 */

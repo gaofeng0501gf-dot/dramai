@@ -1,4 +1,5 @@
 import type { Provider } from '@/types/domain'
+import { resolveKlingAuthorization } from '@/core/video/kling-omni-client'
 
 export interface TestConnectionResult {
   ok: boolean
@@ -15,6 +16,8 @@ export interface TestConnectionResult {
  * 不同 apiFlavor 走不同的"列表"端点：
  *   - openai-compatible: GET {baseUrl}/models
  *   - gemini:            GET {baseUrl}/v1beta/models
+ *   - kling-omni:        GET {baseUrl}/account/costs（Kling 官方免费的账户资源查询，
+ *                        不提交任务、不产生视频费用），验证 Base URL / API Key / 浏览器 CORS
  *   - kling / runway:    无标准列表端点 → 返回 warning，让用户直接生成验证
  */
 export async function testProvider(
@@ -26,6 +29,10 @@ export async function testProvider(
   }
 
   const flavor = provider.apiFlavor ?? 'openai-compatible'
+
+  if (flavor === 'kling-omni') {
+    return testKlingOmniAccount(provider, options)
+  }
 
   if (flavor === 'kling' || flavor === 'runway') {
     return {
@@ -112,6 +119,68 @@ async function testGemini(
       error: friendlyErr(err),
     }
   }
+}
+
+export const KLING_CORS_ERROR =
+  'Kling 官方 API 当前无法从此浏览器 Origin 直连，请使用支持 CORS 的中转/后端代理。'
+
+/** 账户资源查询的时间窗：最近 30 天（毫秒时间戳）。 */
+const KLING_COSTS_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * Kling Omni 零费用连通性检查：GET {baseUrl}/account/costs?start_time&end_time。
+ * 只读查询，不提交任何视频任务。鉴权与生成时一致（默认 Bearer API Key）。
+ *   - fetch 抛 TypeError（浏览器 CORS / 网络不可达）→ 明确的 CORS 提示
+ *   - HTTP 非 2xx / 业务 code≠0 → 失败（多为 API Key 无效）
+ */
+export async function testKlingOmniAccount(
+  provider: Pick<Provider, 'baseUrl' | 'apiKey'>,
+  options: { signal?: AbortSignal; now?: number } = {},
+): Promise<TestConnectionResult> {
+  const root = provider.baseUrl.replace(/\/+$/, '')
+  const end = options.now ?? Date.now()
+  const query = new URLSearchParams({
+    start_time: String(end - KLING_COSTS_WINDOW_MS),
+    end_time: String(end),
+  })
+  const url = `${root}/account/costs?${query.toString()}`
+  let headers: Record<string, string>
+  try {
+    const auth = await resolveKlingAuthorization(provider.apiKey)
+    headers = auth ? { Authorization: auth } : {}
+  } catch (err) {
+    return { ok: false, error: friendlyErr(err) }
+  }
+  let res: Response
+  try {
+    res = await fetch(url, { method: 'GET', headers, signal: options.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') return { ok: false, error: '已取消' }
+    // 浏览器里 CORS 拦截与网络不可达都表现为 TypeError("Failed to fetch")
+    return { ok: false, error: KLING_CORS_ERROR }
+  }
+  if (!res.ok) {
+    const detail = await safeText(res)
+    return {
+      ok: false,
+      status: res.status,
+      error: `HTTP ${res.status}${detail ? ` · ${detail.slice(0, 180)}` : ''}`,
+    }
+  }
+  let json: { code?: number; message?: string }
+  try {
+    json = (await res.json()) as { code?: number; message?: string }
+  } catch {
+    return { ok: false, status: res.status, error: '响应不是 JSON，Base URL 可能填错' }
+  }
+  if (typeof json.code === 'number' && json.code !== 0) {
+    return {
+      ok: false,
+      status: res.status,
+      error: `Kling 业务错误 code ${json.code}: ${json.message ?? ''}`.trim(),
+    }
+  }
+  return { ok: true }
 }
 
 async function safeText(res: Response): Promise<string> {

@@ -6,6 +6,21 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Kling 3.0 Omni native multi-reference video (`ApiFlavor` `'kling-omni'`):
+  `POST /v1/videos/omni-video` + `GET /v1/videos/omni-video/{task_id}`,
+  `model_name: kling-v3-omni`, `sound: on`. Shots no longer need a
+  generated start frame in this mode — pick up to 7 existing character /
+  material images per shot via the new 「Omni参考」 picker
+  (`Storyboard.referenceAssetIds`, IndexedDB schema v2, no data migration).
+- `npm test` (Node built-in test runner, zero new dependencies).
+
+### Changed
+
+- `I2VRequest.imageBlob` is now optional; existing image2video clients
+  throw a clear error if it is missing. Their requests are unchanged.
+
 ## [0.4.1] - 2026-05-04
 
 Hot patch surfaced by a real test: 302.AI exposes Nano Banana
