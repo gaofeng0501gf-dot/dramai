@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ShotImageButton } from '@/components/storyboard/ShotImageButton'
 import { ShotVideoButton } from '@/components/storyboard/ShotVideoButton'
 import { CameraMovementSelect } from '@/components/storyboard/CameraMovementSelect'
+import { OmniReferencePicker } from '@/components/storyboard/OmniReferencePicker'
 import { db } from '@/core/storage/db'
 import { deleteStoryboard } from '@/core/storage/storyboards'
 import { getObjectURL, releaseObjectURL } from '@/core/storage/assets'
@@ -158,6 +159,7 @@ export function StoryboardList({ projectId }: Props) {
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <CameraMovementSelect shot={s} />
                 <ShotImageButton shot={s} />
+                <OmniReferencePicker shot={s} />
                 <ShotVideoButton shot={s} />
               </div>
             </div>

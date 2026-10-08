@@ -45,6 +45,7 @@ export function createVolcengineClient(
         .filter((s): s is string => Boolean(s && s.trim()))
         .join('. ')
 
+      if (!req.imageBlob) throw new Error('火山方舟：缺少起始帧（imageBlob）')
       const imageDataUrl = await blobToDataURL(req.imageBlob)
 
       const content: Array<Record<string, unknown>> = []

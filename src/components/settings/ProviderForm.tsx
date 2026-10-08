@@ -9,21 +9,16 @@ import {
   PROVIDER_PRESETS,
   type ProviderPreset,
 } from '@/components/settings/PROVIDER_PRESETS'
-import type { ApiFlavor, Provider, ProviderKind } from '@/types/domain'
+import {
+  API_FLAVOR_LABEL,
+  FLAVOR_DEFAULTS,
+  flavorsForKind,
+  toProviderDraft,
+  type ProviderDraft,
+} from '@/components/settings/provider-draft'
+import type { ApiFlavor, ProviderKind } from '@/types/domain'
 
-const API_FLAVOR_LABEL: Record<ApiFlavor, string> = {
-  'openai-compatible': 'OpenAI 兼容（默认 · 走 /v1/...）',
-  gemini:
-    'Gemini 原生（文生图专用 · 走 /v1beta/models/{model}:generateContent · Nano Banana / Imagen）',
-  volcengine:
-    '火山方舟 / 即梦（image2video · POST /volcengine/api/v3/contents/generations/tasks · Seedance）',
-  aliyun:
-    '阿里通义万相 / DashScope（image2video · POST /aliyun/api/v1/services/aigc/video-generation/video-synthesis · Wan / 欢乐马）',
-  kling: 'Kling 原生（image2video 专用 · POST /v1/videos/image2video）',
-  runway: 'Runway 原生（暂未完整接入，先按 OpenAI 兼容兜底）',
-}
-
-export type ProviderDraft = Omit<Provider, 'id' | 'lastVerifiedAt'>
+export type { ProviderDraft } from '@/components/settings/provider-draft'
 
 interface Props {
   initial?: Partial<ProviderDraft>
@@ -52,16 +47,19 @@ export function ProviderForm({ initial, onCancel, onSubmit, submitLabel = '保�
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (!label.trim() || !baseUrl.trim()) return
-    onSubmit({
-      label: label.trim(),
-      kind,
-      baseUrl: baseUrl.trim(),
-      apiKey: apiKey.trim(),
-      model: model.trim(),
-      notes: notes.trim() || undefined,
-      apiFlavor: kind === 'image2video' || kind === 'text2image' ? apiFlavor : undefined,
-    })
+    const draft = toProviderDraft({ label, kind, baseUrl, apiKey, model, notes, apiFlavor })
+    if (!draft) return
+    onSubmit(draft)
+  }
+
+  const changeFlavor = (f: ApiFlavor) => {
+    setApiFlavor(f)
+    // 例如选 Kling Omni 时，空着的 Base URL / 模型名自动填官方默认
+    const d = FLAVOR_DEFAULTS[f]
+    if (d) {
+      if (!baseUrl.trim()) setBaseUrl(d.baseUrl)
+      if (!model.trim()) setModel(d.model)
+    }
   }
 
   return (
@@ -138,22 +136,22 @@ export function ProviderForm({ initial, onCancel, onSubmit, submitLabel = '保�
       {(kind === 'image2video' || kind === 'text2image') && (
         <Label>
           API 协议风格
-          <Select value={apiFlavor} onChange={(e) => setApiFlavor(e.target.value as ApiFlavor)}>
-            {(Object.keys(API_FLAVOR_LABEL) as ApiFlavor[])
-              .filter((f) => {
-                // 文生图：OpenAI 兼容 / Gemini 原生
-                // 图生视频：OpenAI 兼容 / 火山方舟 / 阿里通义 / Kling / Runway
-                if (kind === 'text2image') {
-                  return f === 'openai-compatible' || f === 'gemini'
-                }
-                return f !== 'gemini'
-              })
-              .map((f) => (
-                <option key={f} value={f}>
-                  {API_FLAVOR_LABEL[f]}
-                </option>
-              ))}
+          <Select value={apiFlavor} onChange={(e) => changeFlavor(e.target.value as ApiFlavor)}>
+            {flavorsForKind(kind).map((f) => (
+              <option key={f} value={f}>
+                {API_FLAVOR_LABEL[f]}
+              </option>
+            ))}
           </Select>
+          {apiFlavor === 'kling-omni' && kind === 'image2video' && (
+            <span className="text-xs font-normal leading-snug text-muted">
+              填写 Kling Open Platform API Key；旧版 AK/SK JWT 仅 legacy 兼容。
+              <br />
+              Base URL 官方新加坡：https://api-singapore.klingai.com，模型 kling-v3-omni。legacy
+              模式需显式写成 legacy-jwt:AccessKey:SecretKey。分镜卡上点「Omni参考」为每个分镜挑 ≤7
+              张参考图，无需先生图。
+            </span>
+          )}
         </Label>
       )}
 

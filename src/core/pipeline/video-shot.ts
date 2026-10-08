@@ -2,6 +2,8 @@ import { db } from '@/core/storage/db'
 import { createAsset, deleteAsset } from '@/core/storage/assets'
 import { updateStoryboard } from '@/core/storage/storyboards'
 import { createVideoClient } from '@/core/video/factory'
+import { buildOmniPrompt, isKlingOmni, resolveOmniReferenceBlobs } from '@/core/video/omni'
+import type { I2VRequest } from '@/core/video/types'
 import type { CameraMovement, CameraSpeed, Provider, Storyboard } from '@/types/domain'
 
 export interface VideoShotEvent {
@@ -54,35 +56,64 @@ export async function* generateShotVideo(
   opts: RunOpts,
 ): AsyncGenerator<VideoShotEvent, void, void> {
   const shot = opts.storyboard
-  if (!shot.imageAssetId) {
-    yield { shotId: shot.id, phase: 'error', message: '该分镜还没有起始图（先生图再生视频）' }
-    return
+  const omni = isKlingOmni(opts.provider)
+  const camera = opts.cameraOverride ?? shot.cameraParams ?? { movement: 'static' as const }
+  const cameraInstruction = buildCameraInstruction(camera)
+  const baseReq = {
+    model: opts.provider.model,
+    durationSec: opts.durationSec ?? shot.durationSec ?? 5,
+    aspectRatio: opts.aspectRatio,
+    signal: opts.signal,
   }
 
-  const imageAsset = await db.assets.get(shot.imageAssetId)
-  if (!imageAsset) {
-    yield { shotId: shot.id, phase: 'error', message: '起始图缺失（asset 已被清理）' }
-    return
+  let req: I2VRequest
+  if (omni) {
+    // Kling Omni：不需要起始图，直接用分镜选中的参考素材（≤7，复用 IndexedDB 现有 Blob）
+    const resolved = await resolveOmniReferenceBlobs(
+      shot.referenceAssetIds,
+      (id) => db.assets.get(id),
+      await buildReferenceNamer(shot.projectId),
+    )
+    if (!resolved.ok) {
+      yield { shotId: shot.id, phase: 'error', message: resolved.error }
+      return
+    }
+    req = {
+      ...baseReq,
+      // 以 sceneText 的完整动作过程为主体；不用静态关键帧 imagePrompt
+      prompt: buildOmniPrompt({
+        sceneText: shot.sceneText,
+        cameraInstruction,
+        referenceNames: resolved.refs.map((r) => r.name),
+      }),
+      referenceImageBlobs: resolved.refs,
+    }
+  } else {
+    // 普通 image2video：原逻辑不变
+    if (!shot.imageAssetId) {
+      yield { shotId: shot.id, phase: 'error', message: '该分镜还没有起始图（先生图再生视频）' }
+      return
+    }
+    const imageAsset = await db.assets.get(shot.imageAssetId)
+    if (!imageAsset) {
+      yield { shotId: shot.id, phase: 'error', message: '起始图缺失（asset 已被清理）' }
+      return
+    }
+    req = {
+      ...baseReq,
+      prompt: [shot.imagePrompt, shot.sceneText].filter(Boolean).join('. '),
+      imageBlob: imageAsset.blob,
+      cameraInstruction,
+    }
   }
 
   yield { shotId: shot.id, phase: 'submitting' }
 
   const client = createVideoClient(opts.provider)
-  const camera = opts.cameraOverride ?? shot.cameraParams ?? { movement: 'static' as const }
-  const cameraInstruction = buildCameraInstruction(camera)
-  const promptParts = [shot.imagePrompt, shot.sceneText].filter(Boolean).join('. ')
 
   let handle
   try {
-    handle = await client.submit({
-      model: opts.provider.model,
-      prompt: promptParts,
-      imageBlob: imageAsset.blob,
-      durationSec: opts.durationSec ?? shot.durationSec ?? 5,
-      aspectRatio: opts.aspectRatio,
-      cameraInstruction,
-      signal: opts.signal,
-    })
+    handle = await client.submit(req)
   } catch (err) {
     yield {
       shotId: shot.id,
@@ -193,6 +224,19 @@ export async function* generateShotVideo(
   })
 
   yield { shotId: shot.id, phase: 'done' }
+}
+
+/** assetId → 角色名 / 素材名，用于 Omni prompt 里的 <<<image_N>>> 说明。 */
+async function buildReferenceNamer(projectId: string): Promise<(id: string) => string | undefined> {
+  const [characters, materials] = await Promise.all([
+    db.characters.where('projectId').equals(projectId).toArray(),
+    db.materials.where('projectId').equals(projectId).toArray(),
+  ])
+  const names = new Map<string, string>()
+  for (const m of materials) if (m.assetId) names.set(m.assetId, m.name)
+  for (const c of characters)
+    if (c.referenceAssetId) names.set(c.referenceAssetId, `角色·${c.name}`)
+  return (id) => names.get(id)
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {

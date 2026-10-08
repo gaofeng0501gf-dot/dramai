@@ -60,6 +60,7 @@ export function createAliyunClient(
       const promptText = [req.prompt, req.cameraInstruction]
         .filter((s): s is string => Boolean(s && s.trim()))
         .join('. ')
+      if (!req.imageBlob) throw new Error('通义万相：缺少起始帧（imageBlob）')
       const imageDataUrl = await blobToDataURL(req.imageBlob)
 
       const duration = sanitizeDuration(req.durationSec ?? 5)

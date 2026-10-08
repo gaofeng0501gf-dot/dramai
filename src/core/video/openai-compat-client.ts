@@ -21,6 +21,7 @@ export function createOpenAICompatibleVideoClient(
 
   return {
     async submit(req: I2VRequest): Promise<I2VTaskHandle> {
+      if (!req.imageBlob) throw new Error('OpenAI 兼容视频：缺少起始帧（imageBlob）')
       const imageDataUrl = await blobToDataURL(req.imageBlob)
       const promptParts = [req.prompt, req.cameraInstruction].filter(Boolean).join('. ')
       const body: Record<string, unknown> = {

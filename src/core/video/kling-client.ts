@@ -23,6 +23,7 @@ export function createKlingClient(
 
   return {
     async submit(req: I2VRequest): Promise<I2VTaskHandle> {
+      if (!req.imageBlob) throw new Error('Kling image2video：缺少起始帧（imageBlob）')
       const imageBase64 = await blobToPlainBase64(req.imageBlob)
       const promptParts = [req.prompt, req.cameraInstruction].filter(Boolean).join('. ')
       const body: Record<string, unknown> = {

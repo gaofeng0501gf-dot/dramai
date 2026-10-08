@@ -3,6 +3,7 @@ import { Film, Loader2, StopCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useActiveProvider } from '@/store/settings'
 import { generateShotVideo, type VideoShotEvent } from '@/core/pipeline/video-shot'
+import { isKlingOmni, isShotVideoReady } from '@/core/video/omni'
 import type { Storyboard } from '@/types/domain'
 
 interface Props {
@@ -34,8 +35,19 @@ export function ShotVideoButton({ shot, className }: Props) {
     )
   }
 
-  if (!shot.imageAssetId) {
-    return (
+  if (!isShotVideoReady(shot, provider)) {
+    // kling-omni 不需要起始图，只需要选好 Omni 参考素材；其它协议保持原行为
+    return isKlingOmni(provider) ? (
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled
+        className={className}
+        title="请先选择 Omni 参考素材"
+      >
+        <Film className="h-3.5 w-3.5" /> 需选参考
+      </Button>
+    ) : (
       <Button variant="ghost" size="sm" disabled className={className} title="先生图再生视频">
         <Film className="h-3.5 w-3.5" /> 需先生图
       </Button>
