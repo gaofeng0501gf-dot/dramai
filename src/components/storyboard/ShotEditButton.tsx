@@ -113,9 +113,6 @@ function ShotEditDialog({
         </Label>
         {omni && <p className="text-[11px] text-muted">{OMNI_AUDIO_NOTE}</p>}
         <Label>
-        </Label>
-
-        <Label>
           生图提示词（可选）
           <Textarea
             rows={4}
