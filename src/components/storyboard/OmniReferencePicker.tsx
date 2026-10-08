@@ -12,6 +12,7 @@ import {
   buildOmniCandidates,
   dedupeAssetIds,
   isKlingOmni,
+  omniReferenceMixAdvice,
   validateOmniReferenceIds,
 } from '@/core/video/omni'
 import type { Asset, Character, Material, Storyboard } from '@/types/domain'
@@ -93,6 +94,8 @@ function PickerDialog({ shot, onClose }: { shot: Storyboard; onClose: () => void
   // 已失效（素材被删）的旧选择不参与保存
   const effective = selected.filter((id) => candidateIds.includes(id))
   const over = effective.length > KLING_OMNI_MAX_REFS
+  const selectedCandidates = candidates.filter((c) => effective.includes(c.assetId))
+  const mixAdvice = omniReferenceMixAdvice(selectedCandidates)
 
   const save = async () => {
     const ids = dedupeAssetIds(effective)
@@ -136,6 +139,17 @@ function PickerDialog({ shot, onClose }: { shot: Storyboard; onClose: () => void
         </>
       }
     >
+      <div className="mb-3 rounded-md border border-border bg-background-soft-2/60 p-3 text-xs leading-relaxed">
+        <p className="text-foreground">
+          参考策略：视频接口最多 {KLING_OMNI_MAX_REFS} 张。多人动作镜头优先考虑「1 张场景/关系母图 + 核心人物 + 核心武器/道具」，不要用重复定妆图浪费名额。
+        </p>
+        <p className="mt-1 text-muted">
+          当前：角色 {mixAdvice.characterCount} · 素材 {mixAdvice.materialCount} · 合计 {mixAdvice.total}
+        </p>
+        {mixAdvice.warning && (
+          <p className="mt-1 text-amber-400">{mixAdvice.warning}</p>
+        )}
+      </div>
       {candidates.length === 0 ? (
         <p className="text-sm text-muted">
           没有可用图片。请先给出场角色上传参考图并锁定，或在项目素材里上传图片。
