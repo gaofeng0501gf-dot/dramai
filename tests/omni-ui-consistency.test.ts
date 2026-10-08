@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   KLING_OMNI_MAX_DURATION,
   KLING_OMNI_MIN_DURATION,
+  omniReferenceMixAdvice,
   showImageGenerationEntry,
   storyboardStatusLabel,
   toOmniDuration,
@@ -47,9 +48,19 @@ describe('Omni 模式隐藏旧生图入口', () => {
     assert.match(s, /showImageGenerationEntry\(videoProvider\)/)
     assert.match(s, /\{showImageEntry && <ShotImageButton shot=\{s\} \/>\}/)
     assert.equal((s.match(/<ShotImageButton /g) ?? []).length, 1)
+    assert.match(s, /^\s*<ShotEditButton shot=\{s\} \/>$/m)
     assert.match(s, /^\s*<OmniReferencePicker shot=\{s\} \/>$/m)
     assert.match(s, /^\s*<ShotVideoButton shot=\{s\} \/>$/m)
     assert.match(s, /storyboardStatusLabel\(s, videoProvider\)/)
+  })
+
+  it('StoryboardList：分镜内容可直接编辑，Omni 模式明确 sceneText 是视频主体', () => {
+    const list = src('components/storyboard/StoryboardList.tsx')
+    const editor = src('components/storyboard/ShotEditButton.tsx')
+    assert.match(list, /<ShotEditButton shot=\{s\} \/>/)
+    assert.match(editor, /视频动作 \/ 导演指令（Omni 实际发送主体）/)
+    assert.match(editor, /updateStoryboard\(shot\.id/)
+    assert.match(editor, /imagePrompt/)
   })
 
   it('StoryboardList：仅 Kling Omni 显示 3~15 秒时长选择器', () => {
@@ -60,6 +71,25 @@ describe('Omni 模式隐藏旧生图入口', () => {
     assert.match(picker, /KLING_OMNI_MAX_DURATION/)
     assert.match(picker, /updateStoryboard\(shot\.id, \{ durationSec \}\)/)
     assert.match(picker, /aria-label="视频时长"/)
+  })
+})
+
+describe('Omni 参考位配比提示', () => {
+  it('7 个参考位全是人物时给出质量警告；加入素材后不再误报', () => {
+    const allCharacters = Array.from({ length: 7 }, () => ({ source: 'character' as const }))
+    const warned = omniReferenceMixAdvice(allCharacters)
+    assert.equal(warned.characterCount, 7)
+    assert.equal(warned.materialCount, 0)
+    assert.match(warned.warning ?? '', /场景\/关系母图|关键武器/)
+
+    const mixed = omniReferenceMixAdvice([
+      { source: 'character' },
+      { source: 'character' },
+      { source: 'material' },
+    ])
+    assert.equal(mixed.characterCount, 2)
+    assert.equal(mixed.materialCount, 1)
+    assert.equal(mixed.warning, undefined)
   })
 })
 
