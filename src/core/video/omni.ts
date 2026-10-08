@@ -9,7 +9,7 @@ import type { ApiFlavor, Character, Material, Provider, Storyboard } from '@/typ
 
 export const KLING_OMNI_FLAVOR = 'kling-omni' as const satisfies ApiFlavor
 export const KLING_OMNI_MODEL = 'kling-v3-omni'
-export const KLING_OMNI_DEFAULT_BASE_URL = 'https://api-singapore.klingai.com'
+export const KLING_OMNI_DEFAULT_BASE_URL = 'https://api-beijing.klingai.com'
 export const KLING_OMNI_SUBMIT_PATH = '/v1/videos/omni-video'
 /**
  * 官方限制：无参考视频时「参考图 + 多图主体」≤ 7。
@@ -21,6 +21,9 @@ export const KLING_OMNI_PROMPT_MAX = 2500
 /** 官方 duration 枚举 '3' ~ '15'。 */
 export const KLING_OMNI_MIN_DURATION = 3
 export const KLING_OMNI_MAX_DURATION = 15
+
+export const OMNI_CINEMATIC_EXECUTION_RULE =
+  '执行标准：顶级中国3D动画电影级、风格化半写实；动作按预备→接触→施力→完成→反应完整发生，脚步、重心、腰胯、武器重量与惯性真实，接触先于位移；特效必须由动作因果触发，采用克制的东方视觉语汇，禁止无来源光束、粒子污染和游戏式爆炸；风雨、水膜、衣料、旗帜、锁链、石屑随受力产生二次响应；镜头服务空间关系与力量传递，不无意义乱飞或环绕；冲击点只允许极短轻震，关键接触可短促减速，禁止漂浮、布偶和无接触击飞。'
 
 export const OMNI_ERR_NO_REFS = '请先选择 Omni 参考素材'
 export const omniErrTooMany = (n: number) =>
@@ -102,6 +105,28 @@ export function buildOmniCandidates(
   return out
 }
 
+export interface OmniReferenceMixAdvice {
+  total: number
+  characterCount: number
+  materialCount: number
+  warning?: string
+}
+
+/**
+ * 参考位配比提示。7 张是视频接口硬上限；这里只做创作质量提醒，不擅自改用户选择。
+ */
+export function omniReferenceMixAdvice(
+  selected: ReadonlyArray<Pick<OmniCandidate, 'source'>>,
+): OmniReferenceMixAdvice {
+  const characterCount = selected.filter((x) => x.source === 'character').length
+  const materialCount = selected.length - characterCount
+  const warning =
+    selected.length >= 5 && materialCount === 0
+      ? '当前参考位全部是角色图。多人动作镜头建议至少给场景/关系母图或关键武器/道具留 1–3 个位置，避免 7 个名额全被人物定妆占满。'
+      : undefined
+  return { total: selected.length, characterCount, materialCount, warning }
+}
+
 /**
  * 识别 sceneText 中明确写出的角色对白：`角色名（状态）：“台词”` / `角色名:"台词"` /
  * `角色名：「台词」` 这类「说话人 + 冒号 + 引号」结构。
@@ -172,6 +197,7 @@ export function buildOmniPrompt(input: {
   tail.push(
     '一致性：人物五官、发型、服饰，武器与道具的形制，以及场景布局都与对应参考图保持一致；动作完整连贯，不要停在静态构图。',
   )
+  tail.push(OMNI_CINEMATIC_EXECUTION_RULE)
   tail.push(buildOmniAudioRule(scene))
   const suffix = tail.join('\n')
   // 参考说明、一致性与声音约束必须完整发出；sceneText 用剩余空间，头尾保留
