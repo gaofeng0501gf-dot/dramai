@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createKlingOmniClient } from '@/core/video/kling-omni-client'
 import {
   KLING_OMNI_PROMPT_MAX,
+  OMNI_CINEMATIC_EXECUTION_RULE,
   OMNI_CLIP_MARKER,
   buildOmniPrompt,
   clipSceneHeadTail,
@@ -17,7 +18,7 @@ afterEach(() => {
   restore = undefined
 })
 
-const provider = { baseUrl: 'https://api-singapore.klingai.com', apiKey: 'kling_xxx', model: '' }
+const provider = { baseUrl: 'https://api-beijing.klingai.com', apiKey: 'kling_xxx', model: '' }
 
 describe('修复1 · poll 业务错误码', () => {
   it('HTTP 200 + code≠0 直接 failed，不当 queued', async () => {
@@ -56,6 +57,8 @@ describe('修复2 · 原生声音 / 对白规则', () => {
     it(`${k} 段无对白 → 禁止生成任何对白`, () => {
       const p = buildOmniPrompt({ sceneText: scene, referenceNames: ['角色·晏无归'] })
       assert.ok(p.includes('保留原生环境声和动作音效'))
+      assert.ok(p.includes(OMNI_CINEMATIC_EXECUTION_RULE))
+      assert.ok(p.includes('预备→接触→施力→完成→反应'))
       assert.ok(p.includes('禁止生成任何对白、口播或旁白'), p)
       assert.ok(!p.includes('逐字照读'))
       assert.ok(!p.includes('角色对白。'), '不得残留旧的“保留角色对白”表述')
@@ -124,7 +127,7 @@ describe('修复4 · 零费用连通性检查（GET /account/costs）', () => {
     const call = m.calls[0]
     assert.equal(call.method, 'GET')
     const u = new URL(call.url)
-    assert.equal(`${u.origin}${u.pathname}`, 'https://api-singapore.klingai.com/account/costs')
+    assert.equal(`${u.origin}${u.pathname}`, 'https://api-beijing.klingai.com/account/costs')
     assert.equal(u.searchParams.get('end_time'), String(now))
     assert.equal(u.searchParams.get('start_time'), String(now - 30 * 24 * 3600 * 1000))
     assert.equal(call.headers.Authorization, 'Bearer kling_xxx')
