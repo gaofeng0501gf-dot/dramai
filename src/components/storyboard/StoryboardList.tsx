@@ -11,11 +11,7 @@ import { ShotDurationSelect } from '@/components/storyboard/ShotDurationSelect'
 import { db } from '@/core/storage/db'
 import { deleteStoryboard } from '@/core/storage/storyboards'
 import { getObjectURL, releaseObjectURL } from '@/core/storage/assets'
-import {
-  isKlingOmni,
-  showImageGenerationEntry,
-  storyboardStatusLabel,
-} from '@/core/video/omni'
+import { isKlingOmni, showImageGenerationEntry, storyboardStatusLabel } from '@/core/video/omni'
 import { useActiveProvider } from '@/store/settings'
 import type { Asset, Character, Storyboard } from '@/types/domain'
 
