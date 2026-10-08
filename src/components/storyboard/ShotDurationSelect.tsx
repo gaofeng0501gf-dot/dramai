@@ -1,9 +1,6 @@
 import { Select } from '@/components/ui/select'
 import { updateStoryboard } from '@/core/storage/storyboards'
-import {
-  KLING_OMNI_MAX_DURATION,
-  KLING_OMNI_MIN_DURATION,
-} from '@/core/video/omni'
+import { KLING_OMNI_MAX_DURATION, KLING_OMNI_MIN_DURATION } from '@/core/video/omni'
 import type { Storyboard } from '@/types/domain'
 
 interface Props {
