@@ -208,3 +208,37 @@ export async function resolveOmniReferenceBlobs(
   }
   return { ok: true, refs }
 }
+
+/**
+ * 旧「生图」入口（批量生图 / 单镜生图）是否显示。
+ * Kling Omni 不需要起始图，隐藏入口；生图能力本身不删除，切回其它协议即恢复。
+ */
+export function showImageGenerationEntry(
+  provider: Pick<Provider, 'apiFlavor'> | undefined | null,
+): boolean {
+  return !isKlingOmni(provider)
+}
+
+/** 普通 image2video 模式的分镜状态文案（与 v0.4.1 一致）。 */
+export const STORYBOARD_STATUS_LABEL: Record<Storyboard['status'], string> = {
+  pending: '待生图',
+  'image-ready': '图已生成',
+  'video-ready': '视频已生成',
+  failed: '失败',
+}
+
+/**
+ * 分镜状态文案。
+ *   普通模式：待生图 / 图已生成 / 视频已生成 / 失败（原样）
+ *   Kling Omni：待选参考 → 待生视频 → 视频已生成（失败仍显示「失败」）
+ */
+export function storyboardStatusLabel(
+  shot: Pick<Storyboard, 'status' | 'videoAssetId' | 'referenceAssetIds'>,
+  provider: Pick<Provider, 'apiFlavor'> | undefined | null,
+): string {
+  if (!isKlingOmni(provider)) return STORYBOARD_STATUS_LABEL[shot.status]
+  if (shot.videoAssetId || shot.status === 'video-ready') return '视频已生成'
+  if (shot.status === 'failed') return STORYBOARD_STATUS_LABEL.failed
+  if (dedupeAssetIds(shot.referenceAssetIds ?? []).length === 0) return '待选参考'
+  return '待生视频'
+}

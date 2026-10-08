@@ -17,6 +17,8 @@ import { BatchImageButton } from '@/components/storyboard/BatchImageButton'
 import { BatchVideoButton } from '@/components/storyboard/BatchVideoButton'
 import { CompositionCard } from '@/components/composition/CompositionCard'
 import { db } from '@/core/storage/db'
+import { showImageGenerationEntry } from '@/core/video/omni'
+import { useActiveProvider } from '@/store/settings'
 import { deleteProject, updateProject } from '@/core/storage/projects'
 import type { Project, ProjectStatus } from '@/types/domain'
 
@@ -42,6 +44,8 @@ export function ProjectDetailPage() {
   )
 
   const [editing, setEditing] = useState(false)
+  // Kling Omni 无需先生图：隐藏批量生图入口（生图能力保留，切回其它协议即恢复）
+  const showImageEntry = showImageGenerationEntry(useActiveProvider('image2video'))
 
   if (!projectId) return null
 
@@ -152,7 +156,7 @@ export function ProjectDetailPage() {
           <StoryboardGenerator project={project} />
           <div className="flex flex-col gap-4 border-t border-border pt-5">
             <div className="flex flex-wrap gap-3">
-              <BatchImageButton projectId={project.id} />
+              {showImageEntry && <BatchImageButton projectId={project.id} />}
               <BatchVideoButton projectId={project.id} />
             </div>
             <StoryboardList projectId={project.id} />

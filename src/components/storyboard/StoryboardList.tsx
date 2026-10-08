@@ -10,20 +10,17 @@ import { OmniReferencePicker } from '@/components/storyboard/OmniReferencePicker
 import { db } from '@/core/storage/db'
 import { deleteStoryboard } from '@/core/storage/storyboards'
 import { getObjectURL, releaseObjectURL } from '@/core/storage/assets'
+import { showImageGenerationEntry, storyboardStatusLabel } from '@/core/video/omni'
+import { useActiveProvider } from '@/store/settings'
 import type { Asset, Character, Storyboard } from '@/types/domain'
 
 interface Props {
   projectId: string
 }
 
-const STATUS_LABEL: Record<Storyboard['status'], string> = {
-  pending: '待生图',
-  'image-ready': '图已生成',
-  'video-ready': '视频已生成',
-  failed: '失败',
-}
-
 export function StoryboardList({ projectId }: Props) {
+  const videoProvider = useActiveProvider('image2video')
+  const showImageEntry = showImageGenerationEntry(videoProvider)
   const shots = useLiveQuery<Storyboard[], Storyboard[]>(
     async () =>
       db.storyboards
@@ -122,7 +119,7 @@ export function StoryboardList({ projectId }: Props) {
                 <span className="font-mono text-xs text-muted">
                   #{String(s.sequence).padStart(2, '0')}
                 </span>
-                <Badge variant="muted">{STATUS_LABEL[s.status]}</Badge>
+                <Badge variant="muted">{storyboardStatusLabel(s, videoProvider)}</Badge>
                 {s.durationSec && <span className="text-xs text-muted">{s.durationSec}s</span>}
                 {s.characterIds.map((cid) => {
                   const c = characterById.get(cid)
@@ -158,7 +155,7 @@ export function StoryboardList({ projectId }: Props) {
               )}
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <CameraMovementSelect shot={s} />
-                <ShotImageButton shot={s} />
+                {showImageEntry && <ShotImageButton shot={s} />}
                 <OmniReferencePicker shot={s} />
                 <ShotVideoButton shot={s} />
               </div>
