@@ -3,6 +3,22 @@
  * Never replace the original project assets or silently downsample below 1600px
  * long edge / JPEG quality 0.84. A remaining oversized request fails before POST.
  */
+export const DRAMAI_KLING_PROXY_HOST = 'dramai-kling-proxy.gaofeng0501gf.workers.dev'
+
+/** Do not change external/custom Kling provider payloads. */
+export function isDramaiOmniProxy(urlString: string): boolean {
+  try {
+    const url = new URL(urlString)
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === DRAMAI_KLING_PROXY_HOST &&
+      !url.pathname.replace(/\\/+$/, '')
+    )
+  } catch {
+    return false
+  }
+}
+
 export const OMNI_DIRECT_MAX_POST_BYTES = 5 * 1024 * 1024
 const PAYLOAD_HEADROOM_BYTES = 32 * 1024
 const JPEG_MATTE = '#777777'
