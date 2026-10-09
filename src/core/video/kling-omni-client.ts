@@ -1,5 +1,9 @@
 import type { Provider } from '@/types/domain'
-import { uploadOmniReferences, usesOmniR2Transport } from '@/core/video/omni-asset-upload'
+import {
+  compactOmniReferences,
+  isDramaiOmniProxy,
+  OMNI_DIRECT_MAX_POST_BYTES,
+} from '@/core/video/omni-image-compact'
 import type { I2VClient, I2VRequest, I2VStatus, I2VTaskHandle } from '@/core/video/types'
 import {
   KLING_OMNI_MAX_REFS,
@@ -59,11 +63,13 @@ export function createKlingOmniClient(
       if (refs.length === 0) throw new Error(OMNI_ERR_NO_REFS)
       if (refs.length > KLING_OMNI_MAX_REFS) throw new Error(omniErrTooMany(refs.length))
 
-      // dramai Worker：先存私有R2，提交轻量URL JSON；直连其他Kling端点保持旧Base64兼容。
-      // R2上传失败不会调用Omni POST，绝不静默退回23MB Base64。
-      const image_list = usesOmniR2Transport(root)
-        ? await uploadOmniReferences(provider, refs, req.signal)
-        : await Promise.all(refs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })))
+      // 现有 dramai Worker 直接接收 Base64；不需要 R2/KV 或额外付款账户。
+      // 仅当总请求过大时，本地生成高品质传输副本，绝不修改 IndexedDB 原图。
+      const compact = isDramaiOmniProxy(root)
+      const sendRefs = compact ? await compactOmniReferences(refs, { signal: req.signal }) : refs
+      const image_list = await Promise.all(
+        sendRefs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })),
+      )
       const body = {
         model_name: req.model || provider.model || KLING_OMNI_MODEL,
         prompt: req.prompt,
@@ -74,12 +80,21 @@ export function createKlingOmniClient(
         sound: 'on',
       }
 
+      // 测量UTF-8实际发送字节数（而不是JS字符长度），不超限才允许付费提交。
+      const requestJson = JSON.stringify(body)
+      if (
+        compact &&
+        new TextEncoder().encode(requestJson).byteLength > OMNI_DIRECT_MAX_POST_BYTES
+      ) {
+        throw new Error('参考图请求仍超过5MiB安全传输上限，已阻止视频提交，请检查图片素材')
+      }
+
       let res: Response
       try {
         res = await fetch(`${root}${KLING_OMNI_SUBMIT_PATH}`, {
           method: 'POST',
           headers: await jsonHeaders(provider.apiKey),
-          body: JSON.stringify(body),
+          body: requestJson,
           signal: req.signal,
         })
       } catch {

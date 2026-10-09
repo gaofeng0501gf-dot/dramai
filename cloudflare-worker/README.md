@@ -15,48 +15,23 @@ https://dramai-kling-proxy.<account-subdomain>.workers.dev   （本 Worker）
 https://api-beijing.klingai.com                （Kling 官方）
 ```
 
-dramai 的 Kling Omni **视频API协议保持原样**。本版新增私有R2临时图片代理：前端逐张上传PNG/JPEG至R2，再通过不含Base64的短JSON把图片URL提交给 Kling，避免重复发送约23MB请求。
+dramai 的 Kling Omni 协议完全不变，Worker 只做透传。
 
 ## 安全规则
 
 | 规则       | 行为                                                                                                                                                                               |
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 上游       | 固定为 `https://api-beijing.klingai.com`，不能被请求改写                                                                                                                         |
-| Origin     | API与图片上传/删除只允许 `https://gaofeng0501gf-dot.github.io`；仅临时图片的GET/HEAD允许Kling服务端无Origin读取                                                                              |
-| 接口白名单 | 原有三个Kling代理路径，外加`GET /v1/omni-assets/status`、`POST /v1/omni-assets`、临时图片GET/HEAD及授权DELETE；其余仍拒绝                                                              |
+| Origin     | 只允许 `https://gaofeng0501gf-dot.github.io`；其他 Origin（包括没有 Origin 的 curl 请求）返回 **403**                                                                              |
+| 接口白名单 | `GET /account/costs`、`POST /v1/videos/omni-video`、`GET /v1/videos/omni-video/{task_id}`；其他路径或方法返回 **404**                                                              |
 | 预检       | `OPTIONS` 返回 204，带 `Access-Control-Allow-Origin`、`Access-Control-Allow-Methods: GET,POST,OPTIONS`、`Access-Control-Allow-Headers: Authorization,Content-Type`、`Vary: Origin` |
 | 代理口令   | `Authorization` 必须严格等于 `Bearer <PROXY_TOKEN>`（常量时间比较），否则 **401**                                                                                                  |
 | 上游鉴权   | 转发时 `Authorization` 替换为 `Bearer <KLING_API_KEY>`                                                                                                                             |
 | 请求转发   | 保留 path、query string、POST body（逐字节不改）、`Content-Type`；不转发 `Host`、`Content-Length`、`Cookie`、`Origin` 等                                                           |
 | 响应       | 原样返回 Kling 的 HTTP 状态码和响应体，只带回 `Content-Type` 与 CORS 头                                                                                                            |
-| 日志       | 只记录阶段、耗时、HTTP状态码和传输字节数，不记录任何Token、提示词、图片原文、URL随机片段                                                                                                                            |
+| 日志       | 仅记录请求阶段、耗时、HTTP状态，不记录密钥/图片/提示词                                                                                                                            |
 
 `/account/costs` 是 Kling 免费的账户资源查询，dramai 的「测试连接」只调用它，不提交视频任务，不产生视频费用。
-
-## 新增：必须先创建私有R2存储桶及绑定
-
-本升级不是只替换 Worker JS 就能生效。操作人必须在 Cloudflare 仪表板完成以下设置：
-
-1. 进入 **R2 Object Storage → Overview → Create bucket**（部分界面可能要求开通R2服务），名称必须为 **`dramai-omni-assets`**。
-2. **不要启用公开桶地址**，也不需要公共 `r2.dev` 域名。图片只能经现有 Worker 的随机临时URL读取。
-3. 进入 **Workers & Pages → dramai-kling-proxy → Settings → Bindings → Add binding → R2 bucket**；变量名填 **`OMNI_ASSETS`**，选择桶 `dramai-omni-assets`，保存/部署。
-4. 为 R2 桶设置 **Object Lifecycle 自动删除规则：`omni/` 前缀对象创建后2天删除**（UI的生命周期天数颗粒度可能为整数天）。代码层另有24小时严格读取过期校验，生命周期仅负责物理清理。
-5. 重新部署本仓库 `cloudflare-worker/src/index.js` 的完整新代码（已有密钥不会因此需要更换）。
-
-如果使用 Wrangler，`wrangler.toml` 已含 `[[r2_buckets]] binding = "OMNI_ASSETS"`；但 **Cloudflare网页编辑并不会自动读取 GitHub 中的 wrangler.toml**，因此网页部署仍需按第3步手动绑定。
-
-上传接口只接受 `image/png` 和 `image/jpeg`，每张小于或等于10MiB、需要浏览器提供Content-Length；每个返回的随机图片URL **24小时后自动失效**。可灵官方对参考图还有尺寸及长宽比限制，前端不会偷偷压缩、更改你的锁定角色图。如原图不合规，应先以明确可控方式准备合规素材。
-
-### 零视频费用验收
-
-在 dramai → 设置 → Kling 3.0 Omni 卡片：
-
-- **测试连接**：原有 `GET /account/costs` 仅检验可灵连接。
-- **测试R2图片传输（不生成视频）**：依次探测R2绑定、上传一个内置极小测试PNG、通过临时URL读取、授权删除。全过程不会调用 `/v1/videos/omni-video`；R2可能产生极少量存储/操作计费，实际以你的Cloudflare账户为准。
-
-通过这两项后，再确认历史可灵账单/任务中没有未处理的提交，才可手动解除dramai的旧“提交状态未知”锁并尝试一次正式视频生成。
-
-重要：不要把R2 bucket设为公开读，也不要在聊天里提供密钥或带随机令牌的具体临时图片链接。
 
 ## 需要你亲自设置的两个 Secret
 
@@ -121,19 +96,9 @@ curl -i https://dramai-kling-proxy.<account-subdomain>.workers.dev/account/costs
 | API Key      | 你设置的 **`PROXY_TOKEN`**（不是 Kling 的 Key）              |
 | 模型名       | `kling-v3-omni`                                              |
 
-保存后先点「测试连接」确认可灵账户查询，再点「测试R2图片传输（不生成视频）」确认新存储链路。只通过前者不代表R2已经绑定好。
+保存后点「测试连接」：会经 Worker 调用免费的 `/account/costs`，显示「连接 OK」即说明 Base URL、PROXY_TOKEN、Kling API Key 和 CORS 全部正常。
 
 **真正的 `KLING_API_KEY` 不再填写到 dramai 浏览器页面。** 如果以前在 dramai 里填过 Kling 的真 Key，请把那一栏改成 `PROXY_TOKEN`。
-
-## 技术边界与安全
-
-- 浏览器不再把参考图转换成 Base64 提交给可灵：**每张原图先经带鉴权的Worker上传R2，最终Kling JSON只包含对应随机HTTPS图片URL**；人物/场景参考顺序不变。
-- 只对精确匹配 `https://dramai-kling-proxy.gaofeng0501gf.workers.dev` 的视频服务使用R2流程，其他官方直连或不同中转继续使用原Base64兼容模式。R2失败绝不自动退回大请求。
-- 图片临时URL属于随机访问能力凭证：任何持有URL的服务器都可能在有效期内读取，请防止泄露；到期代码即拒绝读取。可灵抓图实际时间必须在24小时内。
-- 已经向可灵发出的视频POST即使网络超时也可能已创建任务；**禁止自动重试**。R2图片上传阶段失败可以在核验后重试，因为此时尚未发送可灵POST。
-- Worker CORS/Origin限制只用于上传、删除及API；可灵远端下载临时图片无浏览器Origin头，GET/HEAD因此必须允许无Origin，但不支持目录列举。
-- **生产验收还需要一次真实的Kling请求才能最终证明可灵能够抓取临时URL**，这一步可能扣费，不纳入“免费测试”。
-- R2服务是否需要账户计费验证或支付方式，取决于当前Cloudflare账号及地区。创建存储桶前先查看Cloudflare的计费说明。
 
 ## 注意事项
 
