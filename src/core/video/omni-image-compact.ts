@@ -12,7 +12,7 @@ export function isDramaiOmniProxy(urlString: string): boolean {
     return (
       url.protocol === 'https:' &&
       url.hostname === DRAMAI_KLING_PROXY_HOST &&
-      !url.pathname.replace(/\\/+$/, '')
+      !url.pathname.replace(/\/+$/, '')
     )
   } catch {
     return false
