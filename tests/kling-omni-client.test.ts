@@ -156,14 +156,14 @@ describe('Kling Omni client', () => {
     restore = m.restore
     const client = createKlingOmniClient(provider)
     await assert.rejects(
-      client.submit({ prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }),
+      client.submit({ model: 'kling-v3-omni', prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }),
       KlingOmniSubmissionUnknownError,
     )
     assert.equal(m.calls.length, 1)
   })
 
   it('上游 502 或HTTP成功但缺少task_id都视为未知；明确4xx拒绝是确定错误', async () => {
-    const h = { prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }
+    const h = { model: 'kling-v3-omni', prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }
     const m = mockFetch(() => new Response('bad gateway', { status: 502 }))
     restore = m.restore
     await assert.rejects(createKlingOmniClient(provider).submit(h), KlingOmniSubmissionUnknownError)
