@@ -37,6 +37,16 @@ import {
  *   - legacy 兼容（显式开启）：apiKey 以 `legacy-jwt:` 开头，写成
  *     `legacy-jwt:<AccessKey>:<SecretKey>`，才会在浏览器内用 HS256 签发 30 分钟 JWT。
  */
+/** 提交链路断开或5xx时，上游可能已经创建付费任务；禁止自动重试。 */
+export class KlingOmniSubmissionUnknownError extends Error {
+  constructor() {
+    super(
+      'Kling Omni 提交状态未知：连接中断或上游异常，可能已创建付费任务。请先在可灵生成记录与账单核查，勿直接重复提交。',
+    )
+    this.name = 'KlingOmniSubmissionUnknownError'
+  }
+}
+
 export function createKlingOmniClient(
   provider: Pick<Provider, 'baseUrl' | 'apiKey' | 'model'>,
 ): I2VClient {
@@ -61,28 +71,42 @@ export function createKlingOmniClient(
         sound: 'on',
       }
 
-      const res = await fetch(`${root}${KLING_OMNI_SUBMIT_PATH}`, {
-        method: 'POST',
-        headers: await jsonHeaders(provider.apiKey),
-        body: JSON.stringify(body),
-        signal: req.signal,
-      })
+      let res: Response
+      try {
+        res = await fetch(`${root}${KLING_OMNI_SUBMIT_PATH}`, {
+          method: 'POST',
+          headers: await jsonHeaders(provider.apiKey),
+          body: JSON.stringify(body),
+          signal: req.signal,
+        })
+      } catch {
+        // Fetch / CORS / AbortError 无响应：无法判断上游是否创建任务。
+        throw new KlingOmniSubmissionUnknownError()
+      }
       if (!res.ok) {
+        // Worker和上游5xx不意味着绝对未创建付费任务。
+        if (res.status >= 500) throw new KlingOmniSubmissionUnknownError()
         throw new Error(
           `Kling Omni submit HTTP ${res.status}: ${(await safeText(res)).slice(0, 280)}`,
         )
       }
-      const json = (await res.json()) as {
+      let json: {
         code?: number
         message?: string
         data?: { task_id?: string }
         task_id?: string
       }
+      try {
+        json = (await res.json()) as typeof json
+      } catch {
+        // HTTP已成功，但响应损坏或连接中断，不能安全重新提交。
+        throw new KlingOmniSubmissionUnknownError()
+      }
       if (typeof json.code === 'number' && json.code !== 0) {
         throw new Error(`Kling Omni submit code ${json.code}: ${json.message ?? ''}`.trim())
       }
       const taskId = json.data?.task_id ?? json.task_id
-      if (!taskId) throw new Error('Kling Omni submit 响应里没找到 task_id')
+      if (!taskId) throw new KlingOmniSubmissionUnknownError()
       return { taskId, apiFlavor: 'kling-omni' }
     },
 
