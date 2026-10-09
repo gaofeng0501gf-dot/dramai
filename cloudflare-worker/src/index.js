@@ -74,7 +74,14 @@ function json(status, body, extraHeaders = {}) {
   })
 }
 
-/** 所有图片存放于私有 R2，临时 URL 随机且过期后不可读。 */
+/** 既支持无需R2订阅的Workers KV，也支持已开通的私有R2。 */
+function assetStore(env) {
+  if (env?.OMNI_ASSETS) return { kind: 'r2', bucket: env.OMNI_ASSETS }
+  if (env?.OMNI_ASSETS_KV) return { kind: 'kv', namespace: env.OMNI_ASSETS_KV }
+  return null
+}
+
+/** 临时图片随机 UUID（不可遍历），24小时逻辑过期；KV还会自动物理过期。 */
 function objectInfo(pathname) {
   const match = ASSET_PATH.exec(pathname)
   if (!match) return null
@@ -82,31 +89,46 @@ function objectInfo(pathname) {
 }
 
 async function serveAsset(request, env, url) {
-  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' })
+  const store = assetStore(env)
+  if (!store) return json(503, { error: 'image_store_not_configured' })
   const info = objectInfo(url.pathname)
-  const object = info && (request.method === 'HEAD'
-    ? await env.OMNI_ASSETS.head(info.key)
-    : await env.OMNI_ASSETS.get(info.key))
-  if (!object) return json(404, { error: 'not_found' })
-  const expiresAt = Number(object.customMetadata?.expiresAt ?? 0)
+  let value
+  let size
+  let expiresAt
+  if (store.kind === 'kv') {
+    // KV各地最终一致；图片上传完毕后前端会等待约75秒再向Kling正式提交。
+    const obj = await store.namespace.getWithMetadata(info.key, { type: 'stream' })
+    if (!obj?.value) return json(404, { error: 'not_found' })
+    value = obj.value
+    size = Number(obj.metadata?.size)
+    expiresAt = Number(obj.metadata?.expiresAt)
+  } else {
+    const obj = request.method === 'HEAD'
+      ? await store.bucket.head(info.key)
+      : await store.bucket.get(info.key)
+    if (!obj) return json(404, { error: 'not_found' })
+    value = obj.body
+    size = obj.size
+    expiresAt = Number(obj.customMetadata?.expiresAt)
+  }
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    // R2 生命周期规则负责物理清理；逻辑过期即刻拒绝读取。
     return json(404, { error: 'not_found' })
   }
   const headers = new Headers({
     'Content-Type': info.mime,
-    'Content-Length': String(object.size),
     'Cache-Control': 'private, no-store',
     'X-Content-Type-Options': 'nosniff',
   })
+  if (Number.isSafeInteger(size) && size > 0) headers.set('Content-Length', String(size))
   if (request.headers.get('Origin') === ALLOWED_ORIGIN) {
     Object.entries(corsHeaders(ALLOWED_ORIGIN)).forEach(([k, v]) => headers.set(k, v))
   }
-  return new Response(request.method === 'HEAD' ? null : object.body, { status: 200, headers })
+  return new Response(request.method === 'HEAD' ? null : value, { status: 200, headers })
 }
 
 async function uploadAsset(request, env, cors) {
-  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' }, cors)
+  const store = assetStore(env)
+  if (!store) return json(503, { error: 'image_store_not_configured' }, cors)
   const mime = request.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase()
   if (mime !== 'image/jpeg' && mime !== 'image/png') {
     return json(415, { error: 'unsupported_image_type' }, cors)
@@ -124,15 +146,22 @@ async function uploadAsset(request, env, cors) {
   const expiresAt = Date.now() + ASSET_TTL_MS
   const startedAt = Date.now()
   try {
-    await env.OMNI_ASSETS.put(key, request.body, {
-      httpMetadata: { contentType: mime, cacheControl: 'private, no-store' },
-      customMetadata: { expiresAt: String(expiresAt) },
-    })
+    if (store.kind === 'kv') {
+      await store.namespace.put(key, request.body, {
+        expirationTtl: Math.ceil(ASSET_TTL_MS / 1000),
+        metadata: { expiresAt, size: length, mime },
+      })
+    } else {
+      await store.bucket.put(key, request.body, {
+        httpMetadata: { contentType: mime, cacheControl: 'private, no-store' },
+        customMetadata: { expiresAt: String(expiresAt) },
+      })
+    }
   } catch {
     trace('asset_upload_error', 'asset_upload', startedAt)
     return json(502, { error: 'asset_upload_failed' }, cors)
   }
-  trace('asset_uploaded', 'asset_upload', startedAt, { requestBytes: length })
+  trace('asset_uploaded', 'asset_upload', startedAt, { requestBytes: length, storage: store.kind })
   return json(201, {
     url: `${new URL(request.url).origin}${ASSET_COLLECTION}/${uuid}.${suffix}`,
     expiresAt,
@@ -140,8 +169,11 @@ async function uploadAsset(request, env, cors) {
 }
 
 async function deleteAsset(request, env, url, cors) {
-  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' }, cors)
-  await env.OMNI_ASSETS.delete(objectInfo(url.pathname).key)
+  const store = assetStore(env)
+  if (!store) return json(503, { error: 'image_store_not_configured' }, cors)
+  const key = objectInfo(url.pathname).key
+  if (store.kind === 'kv') await store.namespace.delete(key)
+  else await store.bucket.delete(key)
   return new Response(null, { status: 204, headers: cors })
 }
 
@@ -187,7 +219,12 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   }
 
   if (url.pathname === ASSET_STATUS) {
-    return json(env.OMNI_ASSETS ? 200 : 503, { ready: Boolean(env.OMNI_ASSETS), maxBytes: MAX_ASSET_BYTES }, cors)
+    const store = assetStore(env)
+    return json(store ? 200 : 503, {
+      ready: Boolean(store),
+      backend: store?.kind ?? null,
+      maxBytes: MAX_ASSET_BYTES,
+    }, cors)
   }
   if (url.pathname === ASSET_COLLECTION) return uploadAsset(request, env, cors)
   if (objectInfo(url.pathname) && request.method === 'DELETE') return deleteAsset(request, env, url, cors)
