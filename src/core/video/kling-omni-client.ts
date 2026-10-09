@@ -1,4 +1,5 @@
 import type { Provider } from '@/types/domain'
+import { uploadOmniReferences, usesOmniR2Transport } from '@/core/video/omni-asset-upload'
 import type { I2VClient, I2VRequest, I2VStatus, I2VTaskHandle } from '@/core/video/types'
 import {
   KLING_OMNI_MAX_REFS,
@@ -58,9 +59,13 @@ export function createKlingOmniClient(
       if (refs.length === 0) throw new Error(OMNI_ERR_NO_REFS)
       if (refs.length > KLING_OMNI_MAX_REFS) throw new Error(omniErrTooMany(refs.length))
 
-      const image_list = await Promise.all(
-        refs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })),
-      )
+      // dramai Worker：先存私有R2，提交轻量URL JSON；直连其他Kling端点保持旧Base64兼容。
+      // R2上传失败不会调用Omni POST，绝不静默退回23MB Base64。
+      const image_list = usesOmniR2Transport(root)
+        ? await uploadOmniReferences(provider, refs, req.signal)
+        : await Promise.all(
+            refs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })),
+          )
       const body = {
         model_name: req.model || provider.model || KLING_OMNI_MODEL,
         prompt: req.prompt,
