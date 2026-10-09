@@ -45,11 +45,7 @@ jobs:
         run: npm test
 
       - name: Format check
-        run: |
-          npm run format:check || {
-            npx prettier src/core/video/omni-asset-upload.ts | diff -u src/core/video/omni-asset-upload.ts - || true
-            exit 1
-          }
+        run: npm run format:check
 
       - name: Build
         run: npm run build
