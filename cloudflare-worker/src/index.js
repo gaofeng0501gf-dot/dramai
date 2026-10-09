@@ -20,7 +20,7 @@ const CORS_HEADERS = 'Authorization,Content-Type'
 const TASK_PATH = /^\/v1\/videos\/omni-video\/[A-Za-z0-9._-]{1,128}$/
 const ASSET_COLLECTION = '/v1/omni-assets'
 const ASSET_STATUS = '/v1/omni-assets/status'
-const ASSET_PATH = /^\\/v1\\/omni-assets\\/([0-9a-f]{8}-[0-9a-f-]{27,28})\\.(png|jpg)$/
+const ASSET_PATH = /^\/v1\/omni-assets\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(png|jpg)$/
 export const MAX_ASSET_BYTES = 10 * 1024 * 1024
 export const ASSET_TTL_MS = 24 * 60 * 60 * 1000
 
