@@ -10,6 +10,12 @@ main = "src/index.js"
 compatibility_date = "2025-09-01"
 workers_dev = true
 
-# 不开启日志采集：Worker 本身也不打印任何内容
+# Worker 仅打印不包含密钥/图片/提示词的阶段日志。启用控制台日志便于诊断。
 [observability]
-enabled = false
+enabled = true
+
+# 私有 R2 存储桶：需要在 Cloudflare 控制台先创建，再绑定到现有 Worker。
+# 手动在网页编辑 Worker 时，也必须在 Settings -> Bindings 配置同名绑定。
+[[r2_buckets]]
+binding = "OMNI_ASSETS"
+bucket_name = "dramai-omni-assets"
