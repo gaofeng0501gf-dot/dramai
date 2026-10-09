@@ -15,9 +15,14 @@
 export const UPSTREAM = 'https://api-beijing.klingai.com'
 export const ALLOWED_ORIGIN = 'https://gaofeng0501gf-dot.github.io'
 
-const CORS_METHODS = 'GET,POST,OPTIONS'
+const CORS_METHODS = 'GET,POST,DELETE,OPTIONS'
 const CORS_HEADERS = 'Authorization,Content-Type'
 const TASK_PATH = /^\/v1\/videos\/omni-video\/[A-Za-z0-9._-]{1,128}$/
+const ASSET_COLLECTION = '/v1/omni-assets'
+const ASSET_STATUS = '/v1/omni-assets/status'
+const ASSET_PATH = /^\/v1\/omni-assets\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.(png|jpg)$/
+export const MAX_ASSET_BYTES = 10 * 1024 * 1024
+export const ASSET_TTL_MS = 24 * 60 * 60 * 1000
 
 /**
  * 白名单：只放行 dramai Kling Omni 用到的三个接口。
@@ -27,6 +32,9 @@ const TASK_PATH = /^\/v1\/videos\/omni-video\/[A-Za-z0-9._-]{1,128}$/
  * 返回该路径允许的方法；不在白名单返回 null。
  */
 export function allowedMethodFor(pathname) {
+  if (pathname === ASSET_COLLECTION) return 'POST'
+  if (pathname === ASSET_STATUS) return 'GET'
+  if (ASSET_PATH.test(pathname)) return 'GET'
   if (pathname === '/account/costs') return 'GET'
   if (pathname === '/v1/videos/omni-video') return 'POST'
   if (TASK_PATH.test(pathname)) return 'GET'
@@ -66,11 +74,87 @@ function json(status, body, extraHeaders = {}) {
   })
 }
 
+/** 所有图片存放于私有 R2，临时 URL 随机且过期后不可读。 */
+function objectInfo(pathname) {
+  const match = ASSET_PATH.exec(pathname)
+  if (!match) return null
+  return { key: `omni/${match[1]}.${match[2]}`, mime: match[2] === 'png' ? 'image/png' : 'image/jpeg' }
+}
+
+async function serveAsset(request, env, url) {
+  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' })
+  const info = objectInfo(url.pathname)
+  const object = info && (request.method === 'HEAD'
+    ? await env.OMNI_ASSETS.head(info.key)
+    : await env.OMNI_ASSETS.get(info.key))
+  if (!object) return json(404, { error: 'not_found' })
+  const expiresAt = Number(object.customMetadata?.expiresAt ?? 0)
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    // R2 生命周期规则负责物理清理；逻辑过期即刻拒绝读取。
+    return json(404, { error: 'not_found' })
+  }
+  const headers = new Headers({
+    'Content-Type': info.mime,
+    'Content-Length': String(object.size),
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  if (request.headers.get('Origin') === ALLOWED_ORIGIN) {
+    Object.entries(corsHeaders(ALLOWED_ORIGIN)).forEach(([k, v]) => headers.set(k, v))
+  }
+  return new Response(request.method === 'HEAD' ? null : object.body, { status: 200, headers })
+}
+
+async function uploadAsset(request, env, cors) {
+  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' }, cors)
+  const mime = request.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase()
+  if (mime !== 'image/jpeg' && mime !== 'image/png') {
+    return json(415, { error: 'unsupported_image_type' }, cors)
+  }
+  const lengthHeader = request.headers.get('Content-Length')
+  const length = Number(lengthHeader)
+  if (!lengthHeader || !Number.isSafeInteger(length) || length <= 0) {
+    return json(411, { error: 'content_length_required' }, cors)
+  }
+  if (length > MAX_ASSET_BYTES) return json(413, { error: 'image_too_large', maxBytes: MAX_ASSET_BYTES }, cors)
+  if (!request.body) return json(400, { error: 'missing_image_body' }, cors)
+  const uuid = crypto.randomUUID()
+  const suffix = mime === 'image/png' ? 'png' : 'jpg'
+  const key = `omni/${uuid}.${suffix}`
+  const expiresAt = Date.now() + ASSET_TTL_MS
+  const startedAt = Date.now()
+  try {
+    await env.OMNI_ASSETS.put(key, request.body, {
+      httpMetadata: { contentType: mime, cacheControl: 'private, no-store' },
+      customMetadata: { expiresAt: String(expiresAt) },
+    })
+  } catch {
+    trace('asset_upload_error', 'asset_upload', startedAt)
+    return json(502, { error: 'asset_upload_failed' }, cors)
+  }
+  trace('asset_uploaded', 'asset_upload', startedAt, { requestBytes: length })
+  return json(201, {
+    url: `${new URL(request.url).origin}${ASSET_COLLECTION}/${uuid}.${suffix}`,
+    expiresAt,
+  }, { ...cors, 'Cache-Control': 'no-store' })
+}
+
+async function deleteAsset(request, env, url, cors) {
+  if (!env?.OMNI_ASSETS) return json(503, { error: 'r2_not_configured' }, cors)
+  await env.OMNI_ASSETS.delete(objectInfo(url.pathname).key)
+  return new Response(null, { status: 204, headers: cors })
+}
+
 /**
  * 处理一个请求。fetchImpl 可注入，便于本地单测；线上用全局 fetch。
  */
 export async function handleRequest(request, env, fetchImpl = fetch) {
+  const url = new URL(request.url)
   const origin = request.headers.get('Origin')
+  // Kling 下载图片时无 Origin/Authorization；只允许获取不可猜、未过期的临时对象。
+  if (objectInfo(url.pathname) && (request.method === 'GET' || request.method === 'HEAD')) {
+    return serveAsset(request, env, url)
+  }
 
   // 1. Origin：只允许 GitHub Pages 上的 dramai；没有 Origin 的请求（curl 等）也拒绝
   if (origin !== ALLOWED_ORIGIN) {
@@ -83,7 +167,6 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
     return json(500, { error: 'proxy_not_configured' }, cors)
   }
 
-  const url = new URL(request.url)
   const allowed = allowedMethodFor(url.pathname)
 
   // 3. 预检
@@ -93,7 +176,7 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   }
 
   // 4. 路径 + 方法白名单
-  if (!allowed || request.method !== allowed) {
+  if (!allowed || (request.method !== allowed && !(objectInfo(url.pathname) && request.method === 'DELETE'))) {
     return json(404, { error: 'not_found' }, cors)
   }
 
@@ -102,6 +185,12 @@ export async function handleRequest(request, env, fetchImpl = fetch) {
   if (!timingSafeEqual(auth, `Bearer ${env.PROXY_TOKEN}`)) {
     return json(401, { error: 'unauthorized' }, cors)
   }
+
+  if (url.pathname === ASSET_STATUS) {
+    return json(env.OMNI_ASSETS ? 200 : 503, { ready: Boolean(env.OMNI_ASSETS), maxBytes: MAX_ASSET_BYTES }, cors)
+  }
+  if (url.pathname === ASSET_COLLECTION) return uploadAsset(request, env, cors)
+  if (objectInfo(url.pathname) && request.method === 'DELETE') return deleteAsset(request, env, url, cors)
 
   // 6. 构造上游请求：固定上游域名，保留 path + query；只转发必要请求头
   const upstreamUrl = `${UPSTREAM}${url.pathname}${url.search}`

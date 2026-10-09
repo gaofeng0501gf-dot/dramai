@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/cn'
 import { testProvider } from '@/core/llm/test-connection'
+import { testOmniR2RoundTrip, usesOmniR2Transport } from '@/core/video/omni-asset-upload'
 import { PROVIDER_KIND_LABEL } from '@/components/settings/PROVIDER_PRESETS'
 import { useSettingsStore } from '@/store/settings'
 import type { Provider } from '@/types/domain'
@@ -20,6 +21,9 @@ export function ProviderCard({ provider, onEdit }: Props) {
   const update = useSettingsStore((s) => s.updateProvider)
 
   const [testing, setTesting] = useState(false)
+  const [assetTesting, setAssetTesting] = useState(false)
+  const [assetResult, setAssetResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const showR2Test = provider.apiFlavor === 'kling-omni' && usesOmniR2Transport(provider.baseUrl)
   const [result, setResult] = useState<{
     ok: boolean
     msg: string
@@ -40,6 +44,19 @@ export function ProviderCard({ provider, onEdit }: Props) {
       update(provider.id, { lastVerifiedAt: Date.now() })
     } else {
       setResult({ ok: false, msg: r.error ?? '未知错误' })
+    }
+  }
+
+  const runR2Test = async () => {
+    setAssetTesting(true)
+    setAssetResult(null)
+    try {
+      await testOmniR2RoundTrip(provider)
+      setAssetResult({ ok: true, msg: 'R2上传→临时URL读取→删除验证成功（未调用Kling视频）' })
+    } catch (error) {
+      setAssetResult({ ok: false, msg: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setAssetTesting(false)
     }
   }
 
@@ -105,6 +122,16 @@ export function ProviderCard({ provider, onEdit }: Props) {
             '测试连接'
           )}
         </Button>
+        {showR2Test && (
+          <Button size="sm" variant="secondary" onClick={runR2Test} disabled={assetTesting}>
+            {assetTesting ? 'R2检测中…' : '测试R2图片传输（不生成视频）'}
+          </Button>
+        )}
+        {assetResult && (
+          <span className={cn('text-xs', assetResult.ok ? 'text-emerald-300' : 'text-destructive')}>
+            {assetResult.msg}
+          </span>
+        )}
         {result && (
           <span className={cn('text-xs', result.ok ? 'text-emerald-300' : 'text-destructive')}>
             {result.msg}
