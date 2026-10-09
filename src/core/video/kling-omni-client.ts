@@ -40,7 +40,9 @@ import {
 /** 提交链路断开或5xx时，上游可能已经创建付费任务；禁止自动重试。 */
 export class KlingOmniSubmissionUnknownError extends Error {
   constructor() {
-    super('Kling Omni 提交状态未知：连接中断或上游异常，可能已创建付费任务。请先在可灵生成记录与账单核查，勿直接重复提交。')
+    super(
+      'Kling Omni 提交状态未知：连接中断或上游异常，可能已创建付费任务。请先在可灵生成记录与账单核查，勿直接重复提交。',
+    )
     this.name = 'KlingOmniSubmissionUnknownError'
   }
 }
