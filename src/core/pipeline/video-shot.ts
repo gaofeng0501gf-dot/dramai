@@ -2,6 +2,7 @@ import { db } from '@/core/storage/db'
 import { createAsset, deleteAsset } from '@/core/storage/assets'
 import { updateStoryboard } from '@/core/storage/storyboards'
 import { createVideoClient } from '@/core/video/factory'
+import { KlingOmniSubmissionUnknownError } from '@/core/video/kling-omni-client'
 import { buildOmniPrompt, isKlingOmni, resolveOmniReferenceBlobs } from '@/core/video/omni'
 import type { I2VRequest } from '@/core/video/types'
 import type { CameraMovement, CameraSpeed, Provider, Storyboard } from '@/types/domain'
@@ -11,6 +12,8 @@ export interface VideoShotEvent {
   phase: 'submitting' | 'queued' | 'processing' | 'downloading' | 'persisting' | 'done' | 'error'
   message?: string
   progress?: number
+  /** POST是否可能已创建付费任务。仅此类错误需要人工确认再重试。 */
+  submissionUncertain?: boolean
 }
 
 interface RunOpts {
@@ -119,6 +122,7 @@ export async function* generateShotVideo(
       shotId: shot.id,
       phase: 'error',
       message: err instanceof Error ? err.message : String(err),
+      submissionUncertain: err instanceof KlingOmniSubmissionUnknownError,
     }
     await updateStoryboard(shot.id, { status: 'failed' })
     return
