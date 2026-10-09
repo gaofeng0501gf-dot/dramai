@@ -82,7 +82,10 @@ export function createKlingOmniClient(
 
       // 测量UTF-8实际发送字节数（而不是JS字符长度），不超限才允许付费提交。
       const requestJson = JSON.stringify(body)
-      if (compact && new TextEncoder().encode(requestJson).byteLength > OMNI_DIRECT_MAX_POST_BYTES) {
+      if (
+        compact &&
+        new TextEncoder().encode(requestJson).byteLength > OMNI_DIRECT_MAX_POST_BYTES
+      ) {
         throw new Error('参考图请求仍超过5MiB安全传输上限，已阻止视频提交，请检查图片素材')
       }
 
