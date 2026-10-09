@@ -30,7 +30,8 @@ function authorizedHeaders(apiKey: string, mime?: string): Record<string, string
 async function explainHttp(res: Response): Promise<string> {
   try {
     const result = (await res.json()) as { error?: string }
-    if (result.error === 'r2_not_configured') return 'Cloudflare Worker 尚未绑定 R2 存储桶 OMNI_ASSETS'
+    if (result.error === 'r2_not_configured')
+      return 'Cloudflare Worker 尚未绑定 R2 存储桶 OMNI_ASSETS'
     if (result.error) return result.error
   } catch {
     // Response may be empty / HTML. Never log source images or API keys.
@@ -82,7 +83,8 @@ export async function uploadOmniImage(
   } catch {
     throw new Error('上传临时图片失败：浏览器与R2代理连接中断，尚未提交可灵视频任务')
   }
-  if (!response.ok) throw new Error(`上传临时图片失败：${await explainHttp(response)}；尚未提交可灵视频任务`)
+  if (!response.ok)
+    throw new Error(`上传临时图片失败：${await explainHttp(response)}；尚未提交可灵视频任务`)
   let url: string | undefined
   try {
     const data = (await response.json()) as { url?: string }
