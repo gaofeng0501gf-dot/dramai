@@ -140,8 +140,6 @@ describe('路径白名单', () => {
     assert.equal(allowedMethodFor('/account/costs'), 'GET')
     assert.equal(allowedMethodFor('/v1/videos/omni-video'), 'POST')
     assert.equal(allowedMethodFor('/v1/videos/omni-video/859123456789'), 'GET')
-    assert.equal(allowedMethodFor('/v1/omni-assets'), 'POST')
-    assert.equal(allowedMethodFor('/v1/omni-assets/status'), 'GET')
     assert.equal(allowedMethodFor('/v1/videos/image2video'), null)
   })
 })
@@ -157,7 +155,7 @@ describe('CORS 预检', () => {
       )
       assert.equal(res.status, 204, path)
       assert.equal(res.headers.get('Access-Control-Allow-Origin'), ALLOWED_ORIGIN)
-      assert.equal(res.headers.get('Access-Control-Allow-Methods'), 'GET,POST,DELETE,OPTIONS')
+      assert.equal(res.headers.get('Access-Control-Allow-Methods'), 'GET,POST,OPTIONS')
       assert.equal(res.headers.get('Access-Control-Allow-Headers'), 'Authorization,Content-Type')
       assert.equal(res.headers.get('Vary'), 'Origin')
     }
@@ -339,126 +337,3 @@ describe('Secret 不外泄', () => {
       assert.ok(!all.includes(forbidden))
     }
   })})
-
-
-describe('私有R2临时素材', () => {
-  function fakeBucket() {
-    const items = new Map()
-    const bucket = {
-      async put(key, stream, options) {
-        const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
-        items.set(key, { bytes, httpMetadata: options.httpMetadata, customMetadata: options.customMetadata })
-        return { key, size: bytes.byteLength }
-      },
-      async get(key) {
-        const item = items.get(key)
-        return item && {
-          size: item.bytes.byteLength,
-          customMetadata: item.customMetadata,
-          body: new Blob([item.bytes]).stream(),
-        }
-      },
-      async head(key) {
-        const item = items.get(key)
-        return item && { size: item.bytes.byteLength, customMetadata: item.customMetadata }
-      },
-      async delete(key) {
-        items.delete(key)
-      },
-    }
-    return { bucket, items }
-  }
-
-  it('R2未绑定时status返回503，不向可灵上游请求', async () => {
-    const up = fakeUpstream()
-    const r = await handleRequest(req('/v1/omni-assets/status'), env, up.fetchImpl)
-    assert.equal(r.status, 503)
-    assert.deepEqual(await r.json(), { ready: false, maxBytes: 10 * 1024 * 1024 })
-    assert.equal(up.calls.length, 0)
-  })
-
-  it('完整上传→无Origin/无Token的Kling GET→浏览器HEAD→授权DELETE', async () => {
-    const { bucket, items } = fakeBucket()
-    const bound = { ...env, OMNI_ASSETS: bucket }
-    const body = 'PNGDATA1234'
-    const h = { 'Content-Type': 'image/png', 'Content-Length': String(body.length) }
-    const up = fakeUpstream()
-    const status = await handleRequest(req('/v1/omni-assets/status'), bound, up.fetchImpl)
-    assert.equal(status.status, 200)
-    assert.equal((await status.json()).ready, true)
-
-    const uploaded = await handleRequest(
-      req('/v1/omni-assets', { method: 'POST', body, headers: h }),
-      bound,
-      up.fetchImpl,
-    )
-    assert.equal(uploaded.status, 201)
-    const data = await uploaded.json()
-    assert.match(data.url, /^https:\/\/dramai-kling-proxy\.example\.workers\.dev\/v1\/omni-assets\/[0-9a-f-]+\.png$/)
-    assert.equal(items.size, 1)
-    const url = new URL(data.url)
-    const read = await handleRequest(new Request(url, { method: 'GET' }), bound, up.fetchImpl)
-    assert.equal(read.status, 200)
-    assert.equal(await read.text(), body)
-    assert.equal(read.headers.get('Cache-Control'), 'private, no-store')
-    assert.equal(read.headers.get('Content-Type'), 'image/png')
-    const head = await handleRequest(req(url.pathname, { method: 'HEAD' }), bound, up.fetchImpl)
-    assert.equal(head.status, 200)
-    assert.equal(head.headers.get('Access-Control-Allow-Origin'), ALLOWED_ORIGIN)
-
-    const deleted = await handleRequest(req(url.pathname, { method: 'DELETE' }), bound, up.fetchImpl)
-    assert.equal(deleted.status, 204)
-    assert.equal(items.size, 0)
-    const missing = await handleRequest(new Request(url), bound, up.fetchImpl)
-    assert.equal(missing.status, 404)
-    assert.equal(up.calls.length, 0)
-  })
-
-  it('过期图片404；恶意来源、未认证上传及删除均不能访问R2', async () => {
-    const { bucket, items } = fakeBucket()
-    const bound = { ...env, OMNI_ASSETS: bucket }
-    const body = 'hello'
-    const headers = { 'Content-Type': 'image/jpeg', 'Content-Length': '5' }
-    const rejected = await handleRequest(
-      req('/v1/omni-assets', { method: 'POST', origin: 'https://evil.example', body, headers }),
-      bound,
-    )
-    assert.equal(rejected.status, 403)
-    const unauthorized = await handleRequest(
-      req('/v1/omni-assets', { method: 'POST', token: 'wrong', body, headers }),
-      bound,
-    )
-    assert.equal(unauthorized.status, 401)
-    const uploaded = await handleRequest(req('/v1/omni-assets', { method: 'POST', body, headers }), bound)
-    assert.equal(uploaded.status, 201)
-    const url = new URL((await uploaded.json()).url)
-    const item = [...items.values()][0]
-    item.customMetadata.expiresAt = '1'
-    assert.equal((await handleRequest(new Request(url), bound)).status, 404)
-    assert.equal(
-      (await handleRequest(req(url.pathname, { method: 'DELETE', token: 'wrong' }), bound)).status,
-      401,
-    )
-    assert.equal(items.size, 1)
-  })
-
-  it('上传限制：必须是PNG/JPEG、有长度且最大10MiB；不能任意代理其他路径', async () => {
-    const { bucket, items } = fakeBucket()
-    const bound = { ...env, OMNI_ASSETS: bucket }
-    const bad = [
-      { headers: { 'Content-Type': 'image/webp', 'Content-Length': '4' }, status: 415 },
-      { headers: { 'Content-Type': 'image/png' }, status: 411 },
-      { headers: { 'Content-Type': 'image/png', 'Content-Length': '10485761' }, status: 413 },
-    ]
-    for (const spec of bad) {
-      const r = await handleRequest(
-        req('/v1/omni-assets', { method: 'POST', body: '1234', headers: spec.headers }),
-        bound,
-      )
-      assert.equal(r.status, spec.status)
-    }
-    assert.equal(items.size, 0)
-    const unsupported = await handleRequest(req('/v1/omni-assets/not-uuid.png'), bound)
-    assert.equal(unsupported.status, 404)
-  })
-})
