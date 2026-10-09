@@ -25,8 +25,9 @@ function fakeUpstream(
 ) {
   const calls = []
   const fetchImpl = async (url, init) => {
-    const body = init.body === undefined ? undefined : new Uint8Array(init.body)
-    calls.push({ url, method: init.method, headers: new Headers(init.headers), body })
+    // 模拟上游消费 ReadableStream；仅测试端收集字节用于逐字比较。
+    const body = init.body === undefined ? undefined : new Uint8Array(await new Response(init.body).arrayBuffer())
+    calls.push({ url, method: init.method, headers: new Headers(init.headers), body, rawBody: init.body })
     return respond(url, init)
   }
   return { calls, fetchImpl }
@@ -223,12 +224,23 @@ describe('转发', () => {
     assert.equal(call.url, `${UPSTREAM}/v1/videos/omni-video`)
     assert.equal(call.method, 'POST')
     assert.deepEqual(call.body, new TextEncoder().encode(body))
+    assert.ok(call.rawBody instanceof ReadableStream, 'POST 必须流式转发，不能变成 ArrayBuffer')
     assert.equal(call.headers.get('Content-Type'), 'application/json; charset=utf-8')
     assert.equal(call.headers.get('Host'), null)
     assert.equal(call.headers.get('Content-Length'), null)
     assert.equal(call.headers.get('Cookie'), null)
     assert.equal(call.headers.get('Origin'), null)
     assert.equal(await res.text(), '{"code":0,"data":{"task_id":"T1"}}')
+  })
+
+  it('流式透传原始 body，不调用 request.arrayBuffer', async () => {
+    const input = req('/v1/videos/omni-video', { method: 'POST', body: 'x'.repeat(256 * 1024) })
+    input.arrayBuffer = () => { throw new Error('arrayBuffer() forbidden') }
+    const up = fakeUpstream()
+    const res = await handleRequest(input, env, up.fetchImpl)
+    assert.equal(res.status, 200)
+    assert.equal(up.calls[0].body.length, 256 * 1024)
+    assert.ok(up.calls[0].rawBody instanceof ReadableStream)
   })
 
   it('轮询 GET /v1/videos/omni-video/{task_id} 转发到上游同一路径', async () => {
@@ -307,9 +319,21 @@ describe('Secret 不外泄', () => {
     }
   })
 
-  it('Worker 源码里不调用 console（不写日志）', async () => {
-    const { readFile } = await import('node:fs/promises')
-    const src = await readFile(new URL('../src/index.js', import.meta.url), 'utf8')
-    assert.ok(!/console\./.test(src))
-  })
-})
+  it('阶段日志不泄露 API Key、代理口令、prompt 或图片', async () => {
+    const logs = []
+    const oldInfo = console.info
+    console.info = (value) => logs.push(String(value))
+    try {
+      const up = fakeUpstream()
+      await handleRequest(req('/v1/videos/omni-video', {
+        method: 'POST', body: JSON.stringify({ prompt: 'PRIVATE_PROMPT', image_list: [{ image_url: 'PRIVATE_IMAGE' }] }),
+      }), env, up.fetchImpl)
+    } finally {
+      console.info = oldInfo
+    }
+    assert.deepEqual(logs.map((line) => JSON.parse(line).stage), ['forward_start', 'upstream_headers'])
+    const all = logs.join(' ')
+    for (const forbidden of [env.KLING_API_KEY, env.PROXY_TOKEN, 'PRIVATE_PROMPT', 'PRIVATE_IMAGE']) {
+      assert.ok(!all.includes(forbidden))
+    }
+  })})
