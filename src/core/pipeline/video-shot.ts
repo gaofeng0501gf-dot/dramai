@@ -146,8 +146,8 @@ export async function* generateShotVideo(
 
   while (Date.now() < deadline) {
     if (opts.signal?.aborted) {
-      yield { shotId: shot.id, phase: 'error', message: '已取消' }
-      await updateStoryboard(shot.id, { pendingVideoTask: undefined })
+      // 已取得task_id，浏览器中止轮询不等于云端取消；保留任务句柄防止重复付费。
+      yield { shotId: shot.id, phase: 'error', message: '已停止本地轮询；可灵任务可能仍在运行，请用已保存的任务ID核查。' }
       return
     }
     await sleep(interval, opts.signal)
