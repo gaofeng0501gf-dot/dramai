@@ -63,9 +63,7 @@ export function createKlingOmniClient(
       // R2上传失败不会调用Omni POST，绝不静默退回23MB Base64。
       const image_list = usesOmniR2Transport(root)
         ? await uploadOmniReferences(provider, refs, req.signal)
-        : await Promise.all(
-            refs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })),
-          )
+        : await Promise.all(refs.map(async (r) => ({ image_url: await blobToPlainBase64(r.blob) })))
       const body = {
         model_name: req.model || provider.model || KLING_OMNI_MODEL,
         prompt: req.prompt,
