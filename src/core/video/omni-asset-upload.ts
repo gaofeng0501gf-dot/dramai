@@ -11,7 +11,11 @@ export const KLING_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export function usesOmniR2Transport(baseUrl: string): boolean {
   try {
     const url = new URL(baseUrl)
-    return url.protocol === 'https:' && url.hostname === KLING_R2_WORKER_HOST && !url.pathname.replace(/\/+$/, '')
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === KLING_R2_WORKER_HOST &&
+      !url.pathname.replace(/\/+$/, '')
+    )
   } catch {
     return false
   }
