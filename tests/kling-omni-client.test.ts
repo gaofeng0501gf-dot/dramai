@@ -2,6 +2,7 @@ import { afterEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createKlingOmniClient,
+  KlingOmniSubmissionUnknownError,
   resolveKlingAuthorization,
   signKlingLegacyJwt,
 } from '@/core/video/kling-omni-client'
@@ -148,6 +149,34 @@ describe('Kling Omni client', () => {
     assert.equal(m.calls.length, 0)
     await client.submit({ model: 'kling-v3-omni', prompt: 'x', referenceImageBlobs: refs(7) })
     assert.equal((m.calls[0].body as { image_list: unknown[] }).image_list.length, 7)
+  })
+
+  it('提交网络异常时标记结果未知，不能提示安全重试', async () => {
+    const m = mockFetch(() => { throw new TypeError('Failed to fetch') })
+    restore = m.restore
+    const client = createKlingOmniClient(provider)
+    await assert.rejects(
+      client.submit({ prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }),
+      KlingOmniSubmissionUnknownError,
+    )
+    assert.equal(m.calls.length, 1)
+  })
+
+  it('上游 502 或HTTP成功但缺少task_id都视为未知；明确4xx拒绝是确定错误', async () => {
+    const h = { prompt: 'A', referenceImageBlobs: [{ blob: pngBlob('hero') }] }
+    const m = mockFetch(() => new Response('bad gateway', { status: 502 }))
+    restore = m.restore
+    await assert.rejects(createKlingOmniClient(provider).submit(h), KlingOmniSubmissionUnknownError)
+    m.restore()
+
+    const noId = mockFetch(() => ({ code: 0, data: {} }))
+    restore = noId.restore
+    await assert.rejects(createKlingOmniClient(provider).submit(h), KlingOmniSubmissionUnknownError)
+    noId.restore()
+
+    const denied = mockFetch(() => new Response('bad request', { status: 400 }))
+    restore = denied.restore
+    await assert.rejects(createKlingOmniClient(provider).submit(h), /HTTP 400/)
   })
 
   it('业务 code≠0 视为提交失败', async () => {
